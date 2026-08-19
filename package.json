@@ -1,0 +1,15 @@
+{
+  "name": "chat-app",
+  "private": true,
+  "workspaces": [
+    "web",
+    "realtime"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=web",
+    "dev:realtime": "npm run dev --workspace=realtime",
+    "build:web": "npm run build --workspace=web",
+    "build:realtime": "npm run build --workspace=realtime"
+  },
+  "type": "module"
+}
