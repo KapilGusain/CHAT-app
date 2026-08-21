@@ -3,7 +3,8 @@
   "private": true,
   "workspaces": [
     "web",
-    "realtime"
+    "realtime",
+    "packages/*"
   ],
   "scripts": {
     "dev:web": "npm run dev --workspace=web",
@@ -11,5 +12,19 @@
     "build:web": "npm run build --workspace=web",
     "build:realtime": "npm run build --workspace=realtime"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
+    "bcryptjs": "^3.0.3",
+    "jose": "^6.2.9",
+    "next-auth": "^5.0.0-beta.32",
+    "pg": "^8.23.0",
+    "prisma": "^7.9.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/pg": "^8.23.1",
+    "dotenv": "^17.4.2"
+  }
 }
