@@ -34,25 +34,6 @@ dotenv.config({
   ),
 });
 
-console.log(
-  "Realtime cwd:",
-  process.cwd()
-);
-
-console.log(
-  "Realtime env path:",
-  path.resolve(
-    process.cwd(),
-    "../.env"
-  )
-);
-
-console.log(
-  "REALTIME_AUTH_SECRET loaded:",
-  Boolean(
-    process.env.REALTIME_AUTH_SECRET
-  )
-);
 
 const app = express();
 
@@ -99,7 +80,7 @@ io.use(async (socket, next) => {
       !token
     ) {
       console.error(
-        "❌ Socket authentication failed: token missing"
+        "Socket authentication failed: token missing"
       );
 
       return next(
@@ -125,7 +106,7 @@ io.use(async (socket, next) => {
 
     if (!user) {
       console.error(
-        "❌ Socket authentication failed: user not found",
+        "Socket authentication failed: user not found",
         {
           userId,
         }
@@ -140,18 +121,10 @@ io.use(async (socket, next) => {
 
     socket.data.userId = user.id;
 
-    console.log(
-      "🔐 Socket authenticated:",
-      {
-        socketId: socket.id,
-        userId: user.id,
-      }
-    );
-
     next();
   } catch (error) {
     console.error(
-      "❌ Socket authentication failed:",
+      "Socket authentication failed:",
       error
     );
 
@@ -286,28 +259,6 @@ io.on("connection", async (socket) => {
         const room =
           `conversation:${conversationId}`;
 
-        console.log(
-          "📢 Broadcasting message",
-          {
-            instanceId,
-            socketId: socket.id,
-            userId,
-            conversationId,
-            room,
-            messageId: message.id,
-          }
-        );
-
-        console.log(
-          "🏠 ROOM MEMBERS BEFORE BROADCAST:",
-          {
-            room,
-            sockets: Array.from(
-              io.sockets.adapter.rooms.get(room) ?? []
-            ),
-          }
-        );
-
         io.to(room).emit(
           "message:new",
           messagePayload
@@ -318,7 +269,7 @@ io.on("connection", async (socket) => {
         });
       } catch (error) {
         console.error(
-          "❌ send_message error:",
+          "send_message error:",
           error
         );
 
@@ -350,16 +301,6 @@ io.on("connection", async (socket) => {
         const userId =
           socket.data.userId as string;
 
-        console.log(
-          "🔵 conversation:join received",
-          {
-            instanceId,
-            socketId: socket.id,
-            userId,
-            conversationId,
-          }
-        );
-
         if (
           typeof conversationId !==
           "string" ||
@@ -378,15 +319,6 @@ io.on("connection", async (socket) => {
             userId
           );
 
-        console.log(
-          "🔍 Membership result:",
-          {
-            userId,
-            conversationId,
-            member,
-          }
-        );
-
         if (!member) {
           return callback?.({
             success: false,
@@ -401,24 +333,14 @@ io.on("connection", async (socket) => {
         await socket.join(room);
 
         console.log(
-          "✅ Socket joined room",
-          {
-            instanceId,
-            socketId: socket.id,
-            room,
-            socketRooms:
-              Array.from(
-                socket.rooms
-              ),
-          }
-        );
+          "Socket joined room");
 
         callback?.({
           success: true,
         });
       } catch (error) {
         console.error(
-          "❌ conversation:join error:",
+          " conversation:join error:",
           error
         );
 
@@ -430,11 +352,6 @@ io.on("connection", async (socket) => {
       }
     }
 
-  );
-
-  console.log(
-    "🧩 conversation:join handler registered:",
-    socket.id
   );
 
   /*
@@ -535,7 +452,7 @@ async function startServer() {
     );
   } catch (error) {
     console.error(
-      "❌ Failed to start realtime server:",
+      "Failed to start realtime server:",
       error
     );
 

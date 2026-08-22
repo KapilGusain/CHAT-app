@@ -77,7 +77,7 @@ export default function ChatWindow({
 
         if (!response.ok) {
           console.error(
-            "❌ Failed to load messages:",
+            " Failed to load messages:",
             response.status
           );
 
@@ -93,7 +93,7 @@ export default function ChatWindow({
         }
       } catch (error) {
         console.error(
-          "❌ Failed to load messages:",
+          " Failed to load messages:",
           error
         );
       } finally {
@@ -139,9 +139,7 @@ export default function ChatWindow({
           }
 
           if (!socket.connected) {
-            console.log(
-              "⚠️ Cannot join conversation: socket is not connected"
-            );
+            console.log("⚠️ Cannot join conversation: socket is not connected");
 
             setSocketReady(false);
             setRoomReady(false);
@@ -157,23 +155,6 @@ export default function ChatWindow({
             return;
           }
 
-          console.log(
-            "🔵 Joining conversation:",
-            {
-              conversationId,
-              socketId: socket.id,
-            }
-          );
-
-          console.log(
-            "🚀 EMITTING conversation:join",
-            {
-              conversationId,
-              socketId: socket.id,
-              connected: socket.connected
-            }
-          );
-
           socket.emit(
             "conversation:join",
             conversationId,
@@ -184,18 +165,13 @@ export default function ChatWindow({
                 return;
               }
 
-              console.log(
-                "📩 Join response:",
-                response
-              );
-
               if (!response.success) {
                 joined = false;
 
                 setRoomReady(false);
 
                 console.error(
-                  "❌ Failed to join conversation:",
+                  " Failed to join conversation:",
                   response.error
                 );
 
@@ -223,18 +199,11 @@ export default function ChatWindow({
         const handleNewMessage = (
           message: Message
         ) => {
-          console.log(
-            "📨 message:new received:",
-            message
-          );
 
           if (
             message.conversationId !==
             conversationId
           ) {
-            console.log(
-              "⚠️ Ignoring message for another conversation"
-            );
 
             return;
           }
@@ -335,13 +304,6 @@ export default function ChatWindow({
           handleConnectError
         );
 
-        /*
-         * IMPORTANT:
-         *
-         * SocketProvider may have already
-         * connected the singleton socket
-         * before this effect runs.
-         */
         if (socket.connected) {
           console.log(
             "🟢 Socket already connected:",
@@ -370,10 +332,6 @@ export default function ChatWindow({
           mounted = false;
 
           if (currentSocket) {
-            console.log(
-              "🧹 Cleaning conversation socket:",
-              conversationId
-            );
 
             currentSocket.emit(
               "conversation:leave",
@@ -452,7 +410,7 @@ export default function ChatWindow({
 
       if (!socket.connected) {
         console.error(
-          "❌ Cannot send message: socket is not connected"
+          " Cannot send message: socket is not connected"
         );
 
         return;
@@ -466,15 +424,6 @@ export default function ChatWindow({
         return;
       }
 
-      console.log(
-        "📤 Sending message:",
-        {
-          conversationId,
-          content: trimmed,
-          socketId: socket.id,
-        }
-      );
-
       socket.emit(
         "send_message",
         {
@@ -484,10 +433,6 @@ export default function ChatWindow({
         (
           response: SocketResponse
         ) => {
-          console.log(
-            "📩 send_message response:",
-            response
-          );
 
           if (!response.success) {
             console.error(
@@ -498,25 +443,19 @@ export default function ChatWindow({
             return;
           }
 
-          /*
-           * Do NOT manually add the message here.
-           *
-           * The server's message:new event
-           * is responsible for updating the UI.
-           */
           setContent("");
         }
       );
     } catch (error) {
       console.error(
-        "❌ Failed to send message:",
+        " Failed to send message:",
         error
       );
     }
   }
 
   return (
-    <div className="flex h-[600px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+    <div className="flex h-150 flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/5">
 
       {/* Header */}
       <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
@@ -599,7 +538,7 @@ export default function ChatWindow({
                         </p>
                       )}
 
-                      <p className="break-words text-sm">
+                      <p className="wrap-break-word text-sm">
                         {message.content}
                       </p>
                     </div>
