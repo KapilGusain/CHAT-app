@@ -29,19 +29,23 @@ export async function POST(request: Request) {
 
     if (otherUserId === session.user.id) {
       return NextResponse.json(
-        { error: "You cannot create a chat with yourself" },
+        {
+          error:
+            "You cannot create a chat with yourself",
+        },
         { status: 400 }
       );
     }
 
-    const otherUser = await prisma.user.findUnique({
-      where: {
-        id: otherUserId,
-      },
-      select: {
-        id: true,
-      },
-    });
+    const otherUser =
+      await prisma.user.findUnique({
+        where: {
+          id: otherUserId,
+        },
+        select: {
+          id: true,
+        },
+      });
 
     if (!otherUser) {
       return NextResponse.json(
@@ -50,87 +54,132 @@ export async function POST(request: Request) {
       );
     }
 
-    // Find  existing direct conversation
+    const directKey = [
+      session.user.id,
+      otherUserId,
+    ]
+      .sort()
+      .join(":");
+
+    
     const existingConversation =
-      await prisma.conversation.findFirst({
+      await prisma.conversation.findUnique({
         where: {
-          type: "DIRECT",
-          AND: [
-            {
-              members: {
-                some: {
-                  userId: session.user.id,
-                },
-              },
-            },
-            {
-              members: {
-                some: {
-                  userId: otherUserId,
-                },
-              },
-            },
-          ],
+          directKey,
         },
         include: {
-          members: true,
-        },
-      });
-
-    if (existingConversation) {
-      const hasExactlyTwoMembers = existingConversation.members.length === 2;
-
-      if (hasExactlyTwoMembers) {
-        return NextResponse.json({
-          conversation: existingConversation,
-          existing: true,
-        });
-      }
-    }
-
-    const conversation = await prisma.conversation.create({
-      data: {
-        type: "DIRECT",
-        createdById: session.user.id,
-
-        members: {
-          create: [
-            {
-              userId: session.user.id,
-            },
-            {
-              userId: otherUserId,
-            },
-          ],
-        },
-      },
-
-      include: {
-        members: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                username: true,
-                email: true,
-                avatarUrl: true,
-                status: true,
+          members: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  username: true,
+                  email: true,
+                  avatarUrl: true,
+                  status: true,
+                  lastSeenAt: true,
+                },
               },
             },
           },
         },
-      },
-    });
+      });
 
-    return NextResponse.json(
-      {
-        conversation,
-        existing: false,
-      },
-      {
-        status: 201,
+    if (existingConversation) {
+      return NextResponse.json({
+        conversation: existingConversation,
+        existing: true,
+      });
+    }
+
+    try {
+      const conversation =
+        await prisma.conversation.create({
+          data: {
+            type: "DIRECT",
+            directKey,
+            createdById: session.user.id,
+
+            members: {
+              create: [
+                {
+                  userId: session.user.id,
+                },
+                {
+                  userId: otherUserId,
+                },
+              ],
+            },
+          },
+
+          include: {
+            members: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    username: true,
+                    email: true,
+                    avatarUrl: true,
+                    status: true,
+                    lastSeenAt: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+
+      return NextResponse.json(
+        {
+          conversation,
+          existing: false,
+        },
+        {
+          status: 201,
+        }
+      );
+    } catch (error: unknown) {
+      
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "P2002"
+      ) {
+        const conversation =
+          await prisma.conversation.findUnique({
+            where: {
+              directKey,
+            },
+            include: {
+              members: {
+                include: {
+                  user: {
+                    select: {
+                      id: true,
+                      username: true,
+                      email: true,
+                      avatarUrl: true,
+                      status: true,
+                      lastSeenAt: true,
+                    },
+                  },
+                },
+              },
+            },
+          });
+
+        if (conversation) {
+          return NextResponse.json({
+            conversation,
+            existing: true,
+          });
+        }
       }
-    );
+
+      throw error;
+    }
   } catch (error) {
     console.error(
       "Create direct conversation error:",
@@ -139,7 +188,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       {
-        error: "Failed to create conversation",
+        error:
+          "Failed to create conversation",
       },
       {
         status: 500,

@@ -93,8 +93,7 @@ io.use(async (socket, next) => {
     const { userId } =
       await verifyRealtimeToken(token);
 
-    const user =
-      await prisma.user.findUnique({
+    const user = await prisma.user.findUnique({
         where: {
           id: userId,
         },
@@ -146,16 +145,26 @@ const instanceId =
 
 io.on("connection", async (socket) => {
 
-  const userId =
-    socket.data.userId as string;
+  const userId = socket.data.userId as string;
+
+  const userRoom = `user:${userId}`;
+
+  await socket.join(userRoom);
+
+  console.log( "👤 Socket joined user room:",
+    {
+      userId,
+      socketId: socket.id,
+      room: userRoom,
+    }
+  );
 
 
   /*
    * SEND MESSAGE
    */
 
-  socket.on(
-    "send_message",
+  socket.on( "send_message",
     async (
       payload: {
         conversationId?: string;
@@ -173,16 +182,9 @@ io.on("connection", async (socket) => {
           socket.data.userId as string;
 
         const conversationId =
-          typeof payload?.conversationId ===
-            "string"
-            ? payload.conversationId.trim()
-            : "";
+          typeof payload?.conversationId === "string" ? payload.conversationId.trim() : "";
 
-        const content =
-          typeof payload?.content ===
-            "string"
-            ? payload.content.trim()
-            : "";
+        const content = typeof payload?.content === "string" ? payload.content.trim() : "";
 
         if (!conversationId) {
           return callback?.({
@@ -208,8 +210,7 @@ io.on("connection", async (socket) => {
           });
         }
 
-        const member =
-          await isConversationMember(
+        const member = await isConversationMember(
             conversationId,
             userId
           );
@@ -222,8 +223,7 @@ io.on("connection", async (socket) => {
           });
         }
 
-        const message =
-          await prisma.message.create({
+        const message = await prisma.message.create({
             data: {
               conversationId,
               senderId: userId,
@@ -241,6 +241,35 @@ io.on("connection", async (socket) => {
             },
           });
 
+          await prisma.conversation.update({
+            where: {
+              id: conversationId,
+            },
+            data: {
+              updatedAt: new Date(),
+            },
+          });
+
+        const conversation = await prisma.conversation.findUnique({
+            where: {
+              id: conversationId,
+            },
+            select: {
+              members: {
+                select: {
+                  userId: true,
+                },
+              },
+            },
+          });
+        
+        if (!conversation) {
+          return callback?.({
+            success: false,
+            error: "Conversation not found",
+          });
+        }
+
         const messagePayload = {
           id: message.id,
           conversationId:
@@ -256,17 +285,17 @@ io.on("connection", async (socket) => {
             message.sender,
         };
 
-        const room =
-          `conversation:${conversationId}`;
+        const room = `conversation:${conversationId}`;
 
-        io.to(room).emit(
-          "message:new",
-          messagePayload
-        );
+        io.to(room).emit("message:new", messagePayload );
 
+        for (const member of conversation.members) {
+          io.to(`user:${member.userId}`).emit( "conversation:updated", messagePayload );
+        }
         callback?.({
           success: true,
         });
+
       } catch (error) {
         console.error(
           "send_message error:",

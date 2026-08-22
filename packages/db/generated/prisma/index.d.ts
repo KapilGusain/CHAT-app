@@ -2641,6 +2641,7 @@ export namespace Prisma {
     id: string | null
     type: $Enums.ConversationType | null
     name: string | null
+    directKey: string | null
     createdById: string | null
     createdAt: Date | null
     updatedAt: Date | null
@@ -2650,6 +2651,7 @@ export namespace Prisma {
     id: string | null
     type: $Enums.ConversationType | null
     name: string | null
+    directKey: string | null
     createdById: string | null
     createdAt: Date | null
     updatedAt: Date | null
@@ -2659,6 +2661,7 @@ export namespace Prisma {
     id: number
     type: number
     name: number
+    directKey: number
     createdById: number
     createdAt: number
     updatedAt: number
@@ -2670,6 +2673,7 @@ export namespace Prisma {
     id?: true
     type?: true
     name?: true
+    directKey?: true
     createdById?: true
     createdAt?: true
     updatedAt?: true
@@ -2679,6 +2683,7 @@ export namespace Prisma {
     id?: true
     type?: true
     name?: true
+    directKey?: true
     createdById?: true
     createdAt?: true
     updatedAt?: true
@@ -2688,6 +2693,7 @@ export namespace Prisma {
     id?: true
     type?: true
     name?: true
+    directKey?: true
     createdById?: true
     createdAt?: true
     updatedAt?: true
@@ -2770,6 +2776,7 @@ export namespace Prisma {
     id: string
     type: $Enums.ConversationType
     name: string | null
+    directKey: string | null
     createdById: string | null
     createdAt: Date
     updatedAt: Date
@@ -2796,6 +2803,7 @@ export namespace Prisma {
     id?: boolean
     type?: boolean
     name?: boolean
+    directKey?: boolean
     createdById?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -2809,6 +2817,7 @@ export namespace Prisma {
     id?: boolean
     type?: boolean
     name?: boolean
+    directKey?: boolean
     createdById?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -2819,6 +2828,7 @@ export namespace Prisma {
     id?: boolean
     type?: boolean
     name?: boolean
+    directKey?: boolean
     createdById?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -2829,12 +2839,13 @@ export namespace Prisma {
     id?: boolean
     type?: boolean
     name?: boolean
+    directKey?: boolean
     createdById?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }
 
-  export type ConversationOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "type" | "name" | "createdById" | "createdAt" | "updatedAt", ExtArgs["result"]["conversation"]>
+  export type ConversationOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "type" | "name" | "directKey" | "createdById" | "createdAt" | "updatedAt", ExtArgs["result"]["conversation"]>
   export type ConversationInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     createdBy?: boolean | Conversation$createdByArgs<ExtArgs>
     members?: boolean | Conversation$membersArgs<ExtArgs>
@@ -2859,6 +2870,7 @@ export namespace Prisma {
       id: string
       type: $Enums.ConversationType
       name: string | null
+      directKey: string | null
       createdById: string | null
       createdAt: Date
       updatedAt: Date
@@ -3291,6 +3303,7 @@ export namespace Prisma {
     readonly id: FieldRef<"Conversation", 'String'>
     readonly type: FieldRef<"Conversation", 'ConversationType'>
     readonly name: FieldRef<"Conversation", 'String'>
+    readonly directKey: FieldRef<"Conversation", 'String'>
     readonly createdById: FieldRef<"Conversation", 'String'>
     readonly createdAt: FieldRef<"Conversation", 'DateTime'>
     readonly updatedAt: FieldRef<"Conversation", 'DateTime'>
@@ -7082,6 +7095,7 @@ export namespace Prisma {
     id: 'id',
     type: 'type',
     name: 'name',
+    directKey: 'directKey',
     createdById: 'createdById',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
@@ -7318,6 +7332,7 @@ export namespace Prisma {
     id?: StringFilter<"Conversation"> | string
     type?: EnumConversationTypeFilter<"Conversation"> | $Enums.ConversationType
     name?: StringNullableFilter<"Conversation"> | string | null
+    directKey?: StringNullableFilter<"Conversation"> | string | null
     createdById?: StringNullableFilter<"Conversation"> | string | null
     createdAt?: DateTimeFilter<"Conversation"> | Date | string
     updatedAt?: DateTimeFilter<"Conversation"> | Date | string
@@ -7330,6 +7345,7 @@ export namespace Prisma {
     id?: SortOrder
     type?: SortOrder
     name?: SortOrderInput | SortOrder
+    directKey?: SortOrderInput | SortOrder
     createdById?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -7340,6 +7356,7 @@ export namespace Prisma {
 
   export type ConversationWhereUniqueInput = Prisma.AtLeast<{
     id?: string
+    directKey?: string
     AND?: ConversationWhereInput | ConversationWhereInput[]
     OR?: ConversationWhereInput[]
     NOT?: ConversationWhereInput | ConversationWhereInput[]
@@ -7351,12 +7368,13 @@ export namespace Prisma {
     createdBy?: XOR<UserNullableScalarRelationFilter, UserWhereInput> | null
     members?: ConversationMemberListRelationFilter
     messages?: MessageListRelationFilter
-  }, "id">
+  }, "id" | "directKey">
 
   export type ConversationOrderByWithAggregationInput = {
     id?: SortOrder
     type?: SortOrder
     name?: SortOrderInput | SortOrder
+    directKey?: SortOrderInput | SortOrder
     createdById?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -7372,6 +7390,7 @@ export namespace Prisma {
     id?: StringWithAggregatesFilter<"Conversation"> | string
     type?: EnumConversationTypeWithAggregatesFilter<"Conversation"> | $Enums.ConversationType
     name?: StringNullableWithAggregatesFilter<"Conversation"> | string | null
+    directKey?: StringNullableWithAggregatesFilter<"Conversation"> | string | null
     createdById?: StringNullableWithAggregatesFilter<"Conversation"> | string | null
     createdAt?: DateTimeWithAggregatesFilter<"Conversation"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"Conversation"> | Date | string
@@ -7670,6 +7689,7 @@ export namespace Prisma {
     id?: string
     type: $Enums.ConversationType
     name?: string | null
+    directKey?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     createdBy?: UserCreateNestedOneWithoutCreatedConversationsInput
@@ -7681,6 +7701,7 @@ export namespace Prisma {
     id?: string
     type: $Enums.ConversationType
     name?: string | null
+    directKey?: string | null
     createdById?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -7692,6 +7713,7 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     type?: EnumConversationTypeFieldUpdateOperationsInput | $Enums.ConversationType
     name?: NullableStringFieldUpdateOperationsInput | string | null
+    directKey?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdBy?: UserUpdateOneWithoutCreatedConversationsNestedInput
@@ -7703,6 +7725,7 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     type?: EnumConversationTypeFieldUpdateOperationsInput | $Enums.ConversationType
     name?: NullableStringFieldUpdateOperationsInput | string | null
+    directKey?: NullableStringFieldUpdateOperationsInput | string | null
     createdById?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -7714,6 +7737,7 @@ export namespace Prisma {
     id?: string
     type: $Enums.ConversationType
     name?: string | null
+    directKey?: string | null
     createdById?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -7723,6 +7747,7 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     type?: EnumConversationTypeFieldUpdateOperationsInput | $Enums.ConversationType
     name?: NullableStringFieldUpdateOperationsInput | string | null
+    directKey?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -7731,6 +7756,7 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     type?: EnumConversationTypeFieldUpdateOperationsInput | $Enums.ConversationType
     name?: NullableStringFieldUpdateOperationsInput | string | null
+    directKey?: NullableStringFieldUpdateOperationsInput | string | null
     createdById?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -8146,6 +8172,7 @@ export namespace Prisma {
     id?: SortOrder
     type?: SortOrder
     name?: SortOrder
+    directKey?: SortOrder
     createdById?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -8155,6 +8182,7 @@ export namespace Prisma {
     id?: SortOrder
     type?: SortOrder
     name?: SortOrder
+    directKey?: SortOrder
     createdById?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -8164,6 +8192,7 @@ export namespace Prisma {
     id?: SortOrder
     type?: SortOrder
     name?: SortOrder
+    directKey?: SortOrder
     createdById?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -8950,6 +8979,7 @@ export namespace Prisma {
     id?: string
     type: $Enums.ConversationType
     name?: string | null
+    directKey?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     members?: ConversationMemberCreateNestedManyWithoutConversationInput
@@ -8960,6 +8990,7 @@ export namespace Prisma {
     id?: string
     type: $Enums.ConversationType
     name?: string | null
+    directKey?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     members?: ConversationMemberUncheckedCreateNestedManyWithoutConversationInput
@@ -9082,6 +9113,7 @@ export namespace Prisma {
     id?: StringFilter<"Conversation"> | string
     type?: EnumConversationTypeFilter<"Conversation"> | $Enums.ConversationType
     name?: StringNullableFilter<"Conversation"> | string | null
+    directKey?: StringNullableFilter<"Conversation"> | string | null
     createdById?: StringNullableFilter<"Conversation"> | string | null
     createdAt?: DateTimeFilter<"Conversation"> | Date | string
     updatedAt?: DateTimeFilter<"Conversation"> | Date | string
@@ -9255,6 +9287,7 @@ export namespace Prisma {
     id?: string
     type: $Enums.ConversationType
     name?: string | null
+    directKey?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     createdBy?: UserCreateNestedOneWithoutCreatedConversationsInput
@@ -9265,6 +9298,7 @@ export namespace Prisma {
     id?: string
     type: $Enums.ConversationType
     name?: string | null
+    directKey?: string | null
     createdById?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -9326,6 +9360,7 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     type?: EnumConversationTypeFieldUpdateOperationsInput | $Enums.ConversationType
     name?: NullableStringFieldUpdateOperationsInput | string | null
+    directKey?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdBy?: UserUpdateOneWithoutCreatedConversationsNestedInput
@@ -9336,6 +9371,7 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     type?: EnumConversationTypeFieldUpdateOperationsInput | $Enums.ConversationType
     name?: NullableStringFieldUpdateOperationsInput | string | null
+    directKey?: NullableStringFieldUpdateOperationsInput | string | null
     createdById?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -9387,6 +9423,7 @@ export namespace Prisma {
     id?: string
     type: $Enums.ConversationType
     name?: string | null
+    directKey?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     createdBy?: UserCreateNestedOneWithoutCreatedConversationsInput
@@ -9397,6 +9434,7 @@ export namespace Prisma {
     id?: string
     type: $Enums.ConversationType
     name?: string | null
+    directKey?: string | null
     createdById?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -9480,6 +9518,7 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     type?: EnumConversationTypeFieldUpdateOperationsInput | $Enums.ConversationType
     name?: NullableStringFieldUpdateOperationsInput | string | null
+    directKey?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdBy?: UserUpdateOneWithoutCreatedConversationsNestedInput
@@ -9490,6 +9529,7 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     type?: EnumConversationTypeFieldUpdateOperationsInput | $Enums.ConversationType
     name?: NullableStringFieldUpdateOperationsInput | string | null
+    directKey?: NullableStringFieldUpdateOperationsInput | string | null
     createdById?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -9716,6 +9756,7 @@ export namespace Prisma {
     id?: string
     type: $Enums.ConversationType
     name?: string | null
+    directKey?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -9795,6 +9836,7 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     type?: EnumConversationTypeFieldUpdateOperationsInput | $Enums.ConversationType
     name?: NullableStringFieldUpdateOperationsInput | string | null
+    directKey?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     members?: ConversationMemberUpdateManyWithoutConversationNestedInput
@@ -9805,6 +9847,7 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     type?: EnumConversationTypeFieldUpdateOperationsInput | $Enums.ConversationType
     name?: NullableStringFieldUpdateOperationsInput | string | null
+    directKey?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     members?: ConversationMemberUncheckedUpdateManyWithoutConversationNestedInput
@@ -9815,6 +9858,7 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     type?: EnumConversationTypeFieldUpdateOperationsInput | $Enums.ConversationType
     name?: NullableStringFieldUpdateOperationsInput | string | null
+    directKey?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }

@@ -30,9 +30,10 @@ model Conversation {
   id          String   @id @default(uuid())
   type        ConversationType
   name        String?
+  directKey   String?  @unique
 
   createdById String?
-  createdBy   User?    @relation("ConversationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy   User?   @relation("ConversationCreator", fields: [createdById], references: [id], onDelete: SetNull)
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

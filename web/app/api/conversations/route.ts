@@ -13,56 +13,92 @@ export async function GET() {
       );
     }
 
-    const conversations =
-      await prisma.conversation.findMany({
-        where: {
-          members: {
-            some: {
-              userId: session.user.id,
-            },
+    const conversations = await prisma.conversation.findMany({
+      where: {
+        members: {
+          some: {
+            userId: session.user.id,
           },
         },
+      },
 
-        include: {
-          members: {
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  username: true,
-                  email: true,
-                  avatarUrl: true,
-                  status: true,
-                  lastSeenAt: true,
-                },
+      include: {
+        members: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                email: true,
+                avatarUrl: true,
+                status: true,
+                lastSeenAt: true,
               },
             },
           },
+        },
 
-          messages: {
-            orderBy: {
-              createdAt: "desc",
-            },
-            take: 1,
-            select: {
-              id: true,
-              content: true,
-              senderId: true,
-              createdAt: true,
-              deletedAt: true,
-            },
+        messages: {
+          orderBy: {
+            createdAt: "desc",
+          },
+          take: 1,
+          select: {
+            id: true,
+            content: true,
+            senderId: true,
+            createdAt: true,
+            deletedAt: true,
           },
         },
+      },
 
-        orderBy: {
-          updatedAt: "desc",
-        },
-      });
+      orderBy: {
+        updatedAt: "desc",
+      },
+    });
+
+    const conversationsWithUnread = await Promise.all(
+    conversations.map(async (conversation) => {
+      const membership =
+        conversation.members.find(
+          (member) =>
+            member.userId === session.user.id
+        );
+
+      const lastReadAt =
+        membership?.lastReadAt ?? null;
+
+      const unreadCount =
+        await prisma.message.count({
+          where: {
+            conversationId: conversation.id,
+
+            senderId: {
+              not: session.user.id,
+            },
+
+            ...(lastReadAt
+              ? {
+                  createdAt: {
+                    gt: lastReadAt,
+                  },
+                }
+              : {}),
+          },
+        });
+
+      return {
+        ...conversation,
+        unreadCount,
+      };
+    })
+    );
 
     return NextResponse.json({
-      conversations,
+      conversations: conversationsWithUnread,
     });
-  } catch (error) {
+    } catch (error) {
     console.error(
       "Get conversations error:",
       error

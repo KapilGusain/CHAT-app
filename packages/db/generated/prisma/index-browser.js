@@ -136,6 +136,7 @@ exports.Prisma.ConversationScalarFieldEnum = {
   id: 'id',
   type: 'type',
   name: 'name',
+  directKey: 'directKey',
   createdById: 'createdById',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'

@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { getSocket } from "@/lib/socket";
 import type { Socket } from "socket.io-client";
@@ -196,9 +192,7 @@ export default function ChatWindow({
         /*
          * New realtime message
          */
-        const handleNewMessage = (
-          message: Message
-        ) => {
+        const handleNewMessage = ( message: Message ) => {
 
           if (
             message.conversationId !==
@@ -221,12 +215,10 @@ export default function ChatWindow({
                 return previousMessages;
               }
 
-              return [
-                ...previousMessages,
-                message,
-              ];
+              return [ ...previousMessages, message, ];
             }
           );
+          void fetch(`/api/conversations/${conversationId}/read`, { method: "POST", });
         };
 
         /*
@@ -381,6 +373,40 @@ export default function ChatWindow({
     };
   }, [conversationId]);
 
+  useEffect(() => {
+    async function markAsRead() {
+      try {
+        const response = await fetch(
+          `/api/conversations/${conversationId}/read`,
+          {
+            method: "POST",
+          }
+        );
+
+        if (!response.ok) {
+          console.error(
+            "Failed to mark conversation as read:",
+            response.status
+          );
+
+          return;
+        }
+
+        console.log(
+          "✅ Conversation marked as read:",
+          conversationId
+        );
+      } catch (error) {
+        console.error(
+          "Mark conversation read error:",
+          error
+        );
+      }
+    }
+
+    void markAsRead();
+  }, [conversationId]);
+
   /*
    * Auto-scroll
    */
@@ -475,13 +501,12 @@ export default function ChatWindow({
 
         <div className="flex items-center gap-2">
           <span
-            className={`h-2 w-2 rounded-full ${
-              roomReady
+            className={`h-2 w-2 rounded-full ${roomReady
                 ? "bg-emerald-400"
                 : socketReady
                   ? "bg-amber-400"
                   : "bg-red-400"
-            }`}
+              }`}
           />
 
           <span className="text-xs text-slate-400">
@@ -515,18 +540,16 @@ export default function ChatWindow({
                 return (
                   <div
                     key={message.id}
-                    className={`flex ${
-                      own
+                    className={`flex ${own
                         ? "justify-end"
                         : "justify-start"
-                    }`}
+                      }`}
                   >
                     <div
-                      className={`max-w-[75%] rounded-2xl px-4 py-3 ${
-                        own
+                      className={`max-w-[75%] rounded-2xl px-4 py-3 ${own
                           ? "bg-cyan-500 text-slate-950"
                           : "bg-slate-800 text-white"
-                      }`}
+                        }`}
                     >
                       {!own && (
                         <p className="mb-1 text-xs font-medium opacity-60">
@@ -567,7 +590,7 @@ export default function ChatWindow({
             onKeyDown={(event) => {
               if (
                 event.key ===
-                  "Enter" &&
+                "Enter" &&
                 !event.shiftKey
               ) {
                 event.preventDefault();
@@ -589,7 +612,7 @@ export default function ChatWindow({
               !content.trim() ||
               !roomReady
             }
-            className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400  disabled:opacity-50"
           >
             Send
           </button>
