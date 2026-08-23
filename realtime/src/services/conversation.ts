@@ -1,9 +1,6 @@
 import { prisma } from "@chat/db";
 
-export async function isConversationMember(
-  conversationId: string,
-  userId: string
-) {
+export async function isConversationMember(conversationId: string, userId: string) {
 
   const conversation = await prisma.conversation.findUnique({
     where: {
@@ -31,9 +28,7 @@ export async function isConversationMember(
 }
 
 
-export async function getConversation(
-  conversationId: string
-) {
+export async function getConversation(conversationId: string) {
   return prisma.conversation.findUnique({
     where: {
       id: conversationId,
@@ -52,6 +47,20 @@ export async function getConversation(
           },
         },
       },
+    },
+  });
+}
+
+export async function markConversationAsRead(conversationId: string, userId: string) {
+  return prisma.conversationMember.update({
+    where: {
+      conversationId_userId: {
+        conversationId,
+        userId,
+      },
+    },
+    data: {
+      lastReadAt: new Date(),
     },
   });
 }

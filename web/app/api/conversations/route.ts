@@ -42,7 +42,9 @@ export async function GET() {
           orderBy: {
             createdAt: "desc",
           },
+
           take: 1,
+
           select: {
             id: true,
             content: true,
@@ -59,46 +61,40 @@ export async function GET() {
     });
 
     const conversationsWithUnread = await Promise.all(
-    conversations.map(async (conversation) => {
-      const membership =
-        conversation.members.find(
-          (member) =>
-            member.userId === session.user.id
-        );
+        conversations.map(async (conversation) => {
+          const currentMember =
+            conversation.members.find(
+              (member) =>
+                member.userId === session.user.id
+            );
 
-      const lastReadAt =
-        membership?.lastReadAt ?? null;
+          const unreadCount =
+            await prisma.message.count({
+              where: {
+                conversationId: conversation.id,
 
-      const unreadCount =
-        await prisma.message.count({
-          where: {
-            conversationId: conversation.id,
+                senderId: {
+                  not: session.user.id,
+                },
 
-            senderId: {
-              not: session.user.id,
-            },
+                ...(currentMember?.lastReadAt
+                  ? {
+                    createdAt: {
+                      gt: currentMember.lastReadAt,
+                    },
+                  }
+                  : {}),
+              },
+            });
 
-            ...(lastReadAt
-              ? {
-                  createdAt: {
-                    gt: lastReadAt,
-                  },
-                }
-              : {}),
-          },
-        });
-
-      return {
-        ...conversation,
-        unreadCount,
-      };
-    })
-    );
+          return { ...conversation, unreadCount };
+        })
+      );
 
     return NextResponse.json({
       conversations: conversationsWithUnread,
     });
-    } catch (error) {
+  } catch (error) {
     console.error(
       "Get conversations error:",
       error

@@ -44,9 +44,7 @@ interface ConversationListProps {
   currentUserId: string;
 }
 
-export default function ConversationList({
-  currentUserId,
-}: ConversationListProps) {
+export default function ConversationList({ currentUserId, }: ConversationListProps) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -159,6 +157,193 @@ export default function ConversationList({
     };
   }, []);
 
+  useEffect(() => {
+    let mounted = true;
+    let socket: Socket | null = null;
+
+    async function setupRealtime() {
+      try {
+        socket = await getSocket();
+
+        if (!mounted) {
+          return;
+        }
+
+        const handleConnect = () => {
+          console.log(
+            "🟢 ConversationList socket connected:",
+            socket?.id
+          );
+        };
+
+        const handleNewMessage = (
+          message: LastMessage & {
+            conversationId: string;
+          }
+        ) => {
+          if (!mounted) {
+            return;
+          }
+
+          setConversations(
+            (previousConversations) => {
+              return previousConversations.map(
+                (conversation) => {
+                  if (
+                    conversation.id !==
+                    message.conversationId
+                  ) {
+                    return conversation;
+                  }
+
+                  const isCurrentConversation =
+                    pathname ===
+                    `/chat/${conversation.id}`;
+
+                  return {
+                    ...conversation,
+
+                    messages: [
+                      {
+                        id: message.id,
+                        content: message.content,
+                        senderId: message.senderId,
+                        createdAt:
+                          message.createdAt,
+                        deletedAt:
+                          message.deletedAt ?? null,
+                      },
+                    ],
+
+                    unreadCount: conversation.unreadCount,
+                  };
+                }
+              );
+            }
+          );
+        };
+
+        const handleConversationRead = ({ conversationId, userId }: {
+          conversationId: string;
+          userId: string;
+        }) => {
+          if (
+            !mounted ||
+            userId !== currentUserId
+          ) {
+            return;
+          }
+
+          setConversations(
+            (previousConversations) =>
+              previousConversations.map(
+                (conversation) =>
+                  conversation.id ===
+                    conversationId
+                    ? {
+                      ...conversation,
+                      unreadCount: 0,
+                    }
+                    : conversation
+              )
+          );
+        };
+
+        const handleConversationUnread = ({
+          conversationId,
+          message,
+        }: {
+          conversationId: string;
+          message: LastMessage;
+        }) => {
+          if (!mounted) {
+            return;
+          }
+
+          if (message.senderId === currentUserId) {
+            return;
+          }
+
+          const currentlyViewing =
+            pathname ===
+            `/chat/${conversationId}`;
+
+          setConversations(
+            (previousConversations) =>
+              previousConversations.map(
+                (conversation) => {
+                  if (
+                    conversation.id !==
+                    conversationId
+                  ) {
+                    return conversation;
+                  }
+
+                  return {
+                    ...conversation,
+
+                    messages: [
+                      {
+                        id: message.id,
+                        content: message.content,
+                        senderId: message.senderId,
+                        createdAt: message.createdAt,
+                        deletedAt:
+                          message.deletedAt ?? null,
+                      },
+                    ],
+
+                    unreadCount:
+                      currentlyViewing
+                        ? conversation.unreadCount
+                        : conversation.unreadCount + 1,
+                  };
+                }
+              )
+          );
+        };
+
+        socket.on("connect", handleConnect);
+
+        socket.on("message:new", handleNewMessage);
+
+        socket.on("conversation:read", handleConversationRead);
+
+        socket.on("conversation:unread", handleConversationUnread);
+
+        if (!socket.connected) {
+          socket.connect();
+        }
+
+        return () => {
+          socket?.off("connect", handleConnect);
+
+          socket?.off("message:new", handleNewMessage);
+
+          socket?.off("conversation:read", handleConversationRead);
+
+          socket?.off("conversation:unread", handleConversationUnread);
+        };
+      } catch (error) {
+        console.error(
+          "ConversationList realtime error:",
+          error
+        );
+      }
+    }
+
+    const cleanupPromise =
+      setupRealtime();
+
+    return () => {
+      mounted = false;
+
+      cleanupPromise.then(
+        (cleanup) => cleanup?.()
+      );
+    };
+  }, [currentUserId, pathname]);
+
   function getOtherMember(
     conversation: Conversation
   ) {
@@ -270,35 +455,23 @@ export default function ConversationList({
             <div className="space-y-1">
               {conversations.map(
                 (conversation) => {
-                  const name =
-                    getConversationName(
-                      conversation
-                    );
+                  const name = getConversationName(conversation);
 
-                  const avatar =
-                    getConversationAvatar(
-                      conversation
-                    );
+                  const avatar = getConversationAvatar(conversation);
 
-                  const status =
-                    getConversationStatus(
-                      conversation
-                    );
+                  const status = getConversationStatus(conversation);
 
-                  const lastMessage =
-                    conversation.messages[0];
+                  const lastMessage = conversation.messages[0];
 
-                  const active =
-                    pathname ===
-                    `/chat/${conversation.id}`;
+                  const active = pathname === `/chat/${conversation.id}`;
 
                   return (
                     <Link
                       key={conversation.id}
                       href={`/chat/${conversation.id}`}
                       className={`flex items-center gap-3 rounded-xl p-3 transition ${active
-                          ? "bg-white/10"
-                          : "hover:bg-white/5"
+                        ? "bg-white/10"
+                        : "hover:bg-white/5"
                         }`}
                     >
                       {/* Avatar */}

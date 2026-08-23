@@ -29,30 +29,20 @@ interface SocketResponse {
   error?: string;
 }
 
-export default function ChatWindow({
-  conversationId,
-  currentUserId,
-}: ChatWindowProps) {
-  const [messages, setMessages] =
-    useState<Message[]>([]);
+export default function ChatWindow({ conversationId, currentUserId }: ChatWindowProps) {
+  const [messages, setMessages] = useState<Message[]>([]);
 
-  const [content, setContent] =
-    useState("");
+  const [content, setContent] = useState("");
 
-  const [loading, setLoading] =
-    useState(true);
+  const [loading, setLoading] = useState(true);
 
-  const [socketReady, setSocketReady] =
-    useState(false);
+  const [socketReady, setSocketReady] = useState(false);
 
-  const [roomReady, setRoomReady] =
-    useState(false);
+  const [roomReady, setRoomReady] = useState(false);
 
-  const socketRef =
-    useRef<Socket | null>(null);
+  const socketRef = useRef<Socket | null>(null);
 
-  const messagesEndRef =
-    useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   /*
    * Load existing messages
@@ -151,12 +141,7 @@ export default function ChatWindow({
             return;
           }
 
-          socket.emit(
-            "conversation:join",
-            conversationId,
-            (
-              response: SocketResponse
-            ) => {
+          socket.emit("conversation:join", conversationId, ( response: SocketResponse ) => {
               if (!mounted) {
                 return;
               }
@@ -178,6 +163,8 @@ export default function ChatWindow({
 
               setRoomReady(true);
 
+              markConversationAsRead(socket);
+
               console.log(
                 "✅ Joined conversation:",
                 {
@@ -192,30 +179,28 @@ export default function ChatWindow({
         /*
          * New realtime message
          */
-        const handleNewMessage = ( message: Message ) => {
+        const handleNewMessage = (message: Message) => {
 
-          if (
-            message.conversationId !==
-            conversationId
-          ) {
+          if ( message.conversationId !== conversationId ) {
 
             return;
           }
 
+          if (socket.connected) {
+            markConversationAsRead(socket);
+          }
+
           setMessages(
             (previousMessages) => {
-              const exists =
-                previousMessages.some(
-                  (existingMessage) =>
-                    existingMessage.id ===
-                    message.id
+              const exists = previousMessages.some(
+                  (existingMessage) => existingMessage.id === message.id
                 );
 
               if (exists) {
                 return previousMessages;
               }
 
-              return [ ...previousMessages, message, ];
+              return [...previousMessages, message,];
             }
           );
           void fetch(`/api/conversations/${conversationId}/read`, { method: "POST", });
@@ -376,8 +361,7 @@ export default function ChatWindow({
   useEffect(() => {
     async function markAsRead() {
       try {
-        const response = await fetch(
-          `/api/conversations/${conversationId}/read`,
+        const response = await fetch(`/api/conversations/${conversationId}/read`,
           {
             method: "POST",
           }
@@ -406,6 +390,37 @@ export default function ChatWindow({
 
     void markAsRead();
   }, [conversationId]);
+
+  function markConversationAsRead(
+    socket: Socket
+  ) {
+    if (
+      !socket.connected ||
+      !conversationId
+    ) {
+      return;
+    }
+
+    socket.emit(
+      "conversation:read",
+      conversationId,
+      (response: SocketResponse) => {
+        if (!response.success) {
+          console.error(
+            "❌ Failed to mark conversation as read:",
+            response.error
+          );
+
+          return;
+        }
+
+        console.log(
+          "📖 Conversation marked as read:",
+          conversationId
+        );
+      }
+    );
+  }
 
   /*
    * Auto-scroll
@@ -502,10 +517,10 @@ export default function ChatWindow({
         <div className="flex items-center gap-2">
           <span
             className={`h-2 w-2 rounded-full ${roomReady
-                ? "bg-emerald-400"
-                : socketReady
-                  ? "bg-amber-400"
-                  : "bg-red-400"
+              ? "bg-emerald-400"
+              : socketReady
+                ? "bg-amber-400"
+                : "bg-red-400"
               }`}
           />
 
@@ -541,14 +556,14 @@ export default function ChatWindow({
                   <div
                     key={message.id}
                     className={`flex ${own
-                        ? "justify-end"
-                        : "justify-start"
+                      ? "justify-end"
+                      : "justify-start"
                       }`}
                   >
                     <div
                       className={`max-w-[75%] rounded-2xl px-4 py-3 ${own
-                          ? "bg-cyan-500 text-slate-950"
-                          : "bg-slate-800 text-white"
+                        ? "bg-cyan-500 text-slate-950"
+                        : "bg-slate-800 text-white"
                         }`}
                     >
                       {!own && (

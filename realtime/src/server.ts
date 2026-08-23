@@ -6,26 +6,15 @@ import { createServer } from "node:http";
 import { Server } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 
-import {
-  connectValkey,
-  pubClient,
-  subClient,
-} from "./redis.js";
+import { connectValkey, pubClient, subClient } from "./redis.js";
 
-import {
-  addConnection,
-  removeConnection,
-} from "./presence.js";
+import { addConnection, removeConnection } from "./presence.js";
 
-import {
-  verifyRealtimeToken,
-} from "./auth.js";
+import { verifyRealtimeToken, } from "./auth.js";
 
 import { prisma } from "@chat/db";
 
-import {
-  isConversationMember,
-} from "./services/conversation.js";
+import { isConversationMember, markConversationAsRead, getConversation, } from "./services/conversation.js";
 
 dotenv.config({
   path: path.resolve(
@@ -94,14 +83,14 @@ io.use(async (socket, next) => {
       await verifyRealtimeToken(token);
 
     const user = await prisma.user.findUnique({
-        where: {
-          id: userId,
-        },
+      where: {
+        id: userId,
+      },
 
-        select: {
-          id: true,
-        },
-      });
+      select: {
+        id: true,
+      },
+    });
 
     if (!user) {
       console.error(
@@ -151,7 +140,7 @@ io.on("connection", async (socket) => {
 
   await socket.join(userRoom);
 
-  console.log( "👤 Socket joined user room:",
+  console.log("👤 Socket joined user room:",
     {
       userId,
       socketId: socket.id,
@@ -164,7 +153,7 @@ io.on("connection", async (socket) => {
    * SEND MESSAGE
    */
 
-  socket.on( "send_message",
+  socket.on("send_message",
     async (
       payload: {
         conversationId?: string;
@@ -211,9 +200,9 @@ io.on("connection", async (socket) => {
         }
 
         const member = await isConversationMember(
-            conversationId,
-            userId
-          );
+          conversationId,
+          userId
+        );
 
         if (!member) {
           return callback?.({
@@ -224,45 +213,45 @@ io.on("connection", async (socket) => {
         }
 
         const message = await prisma.message.create({
-            data: {
-              conversationId,
-              senderId: userId,
-              content,
-            },
+          data: {
+            conversationId,
+            senderId: userId,
+            content,
+          },
 
-            include: {
-              sender: {
-                select: {
-                  id: true,
-                  username: true,
-                  avatarUrl: true,
-                },
+          include: {
+            sender: {
+              select: {
+                id: true,
+                username: true,
+                avatarUrl: true,
               },
             },
-          });
+          },
+        });
 
-          await prisma.conversation.update({
-            where: {
-              id: conversationId,
-            },
-            data: {
-              updatedAt: new Date(),
-            },
-          });
+        await prisma.conversation.update({
+          where: {
+            id: conversationId,
+          },
+          data: {
+            updatedAt: new Date(),
+          },
+        });
 
         const conversation = await prisma.conversation.findUnique({
-            where: {
-              id: conversationId,
-            },
-            select: {
-              members: {
-                select: {
-                  userId: true,
-                },
+          where: {
+            id: conversationId,
+          },
+          select: {
+            members: {
+              select: {
+                userId: true,
               },
             },
-          });
-        
+          },
+        });
+
         if (!conversation) {
           return callback?.({
             success: false,
@@ -272,25 +261,29 @@ io.on("connection", async (socket) => {
 
         const messagePayload = {
           id: message.id,
-          conversationId:
-            message.conversationId,
-          senderId:
-            message.senderId,
+          conversationId: message.conversationId,
+          senderId: message.senderId,
           content: message.content,
-          createdAt:
-            message.createdAt.toISOString(),
-          updatedAt:
-            message.updatedAt.toISOString(),
-          sender:
-            message.sender,
+          createdAt: message.createdAt.toISOString(),
+          updatedAt: message.updatedAt.toISOString(),
+          sender: message.sender,
         };
 
         const room = `conversation:${conversationId}`;
 
-        io.to(room).emit("message:new", messagePayload );
+        io.to(room).emit("message:new", messagePayload);
 
         for (const member of conversation.members) {
-          io.to(`user:${member.userId}`).emit( "conversation:updated", messagePayload );
+          if (member.userId === userId) {
+            continue;
+          }
+          io.to(`user:${member.userId}`).emit("conversation:updated", messagePayload);
+          io.to(`user:${member.userId}`).emit("conversation:unread",
+            {
+              conversationId,
+              message: messagePayload,
+            }
+          );
         }
         callback?.({
           success: true,
@@ -384,6 +377,83 @@ io.on("connection", async (socket) => {
   );
 
   /*
+ * MARK AS READ
+ */
+
+  socket.on(
+    "conversation:read",
+    async (
+      conversationId: string,
+      callback?: (
+        response: {
+          success: boolean;
+          error?: string;
+        }
+      ) => void
+    ) => {
+      try {
+        const userId =
+          socket.data.userId as string;
+
+        if (
+          typeof conversationId !== "string" ||
+          !conversationId.trim()
+        ) {
+          return callback?.({
+            success: false,
+            error: "Conversation ID is required",
+          });
+        }
+
+        const member =
+          await isConversationMember(
+            conversationId,
+            userId
+          );
+
+        if (!member) {
+          return callback?.({
+            success: false,
+            error:
+              "You are not a member of this conversation",
+          });
+        }
+
+        await markConversationAsRead(
+          conversationId,
+          userId
+        );
+
+        /*
+         * Notify this user's other tabs/windows.
+         */
+        io.to(`user:${userId}`).emit(
+          "conversation:read",
+          {
+            conversationId,
+            userId,
+          }
+        );
+
+        callback?.({
+          success: true,
+        });
+      } catch (error) {
+        console.error(
+          "conversation:read error:",
+          error
+        );
+
+        callback?.({
+          success: false,
+          error:
+            "Unable to mark conversation as read",
+        });
+      }
+    }
+  );
+
+  /*
    * LEAVE CONVERSATION
    */
 
@@ -435,6 +505,8 @@ io.on("connection", async (socket) => {
       }
     }
   );
+
+  await socket.join(`user:${userId}`);
 
   void addConnection(userId, socket.id)
     .then(() => {
