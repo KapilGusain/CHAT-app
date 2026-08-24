@@ -17,6 +17,7 @@ interface Message {
     username: string;
     avatarUrl: string | null;
   };
+  readByCurrentUser?: boolean;
 }
 
 interface ChatWindowProps {
@@ -31,18 +32,17 @@ interface SocketResponse {
 
 export default function ChatWindow({ conversationId, currentUserId }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
-
   const [content, setContent] = useState("");
 
   const [loading, setLoading] = useState(true);
+  const [readMessages, setReadMessages] = useState<Set<string>>(new Set());
 
   const [socketReady, setSocketReady] = useState(false);
-
   const [roomReady, setRoomReady] = useState(false);
 
   const socketRef = useRef<Socket | null>(null);
-
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const readMessagesRef = useRef<Set<string>>(new Set());
 
   /*
    * Load existing messages
@@ -54,8 +54,7 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
       setLoading(true);
 
       try {
-        const response = await fetch(
-          `/api/conversations/${conversationId}/messages`,
+        const response = await fetch(`/api/conversations/${conversationId}/messages`,
           {
             cache: "no-store",
           }
@@ -73,9 +72,7 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
         const data = await response.json();
 
         if (mounted) {
-          setMessages(
-            data.messages ?? []
-          );
+          setMessages(data.messages ?? []);
         }
       } catch (error) {
         console.error(
@@ -103,6 +100,9 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
     let mounted = true;
     let currentSocket: Socket | null = null;
     let joined = false;
+
+    readMessagesRef.current.clear();
+    setReadMessages(new Set());
 
     async function setupSocket() {
       try {
@@ -133,46 +133,35 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
             return;
           }
 
-          /*
-           * Prevent duplicate joins during
-           * the same connection.
-           */
           if (joined) {
             return;
           }
 
-          socket.emit("conversation:join", conversationId, ( response: SocketResponse ) => {
-              if (!mounted) {
-                return;
-              }
-
-              if (!response.success) {
-                joined = false;
-
-                setRoomReady(false);
-
-                console.error(
-                  " Failed to join conversation:",
-                  response.error
-                );
-
-                return;
-              }
-
-              joined = true;
-
-              setRoomReady(true);
-
-              markConversationAsRead(socket);
-
-              console.log(
-                "✅ Joined conversation:",
-                {
-                  conversationId,
-                  socketId: socket.id,
-                }
-              );
+          socket.emit("conversation:join", conversationId, (response: SocketResponse) => {
+            if (!mounted) {
+              return;
             }
+
+            if (!response.success) {
+              joined = false;
+
+              setRoomReady(false);
+
+              console.error(
+                " Failed to join conversation:",
+                response.error
+              );
+
+              return;
+            }
+
+            joined = true;
+
+            setRoomReady(true);
+
+            markConversationAsRead(socket);
+
+          }
           );
         };
 
@@ -181,20 +170,15 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
          */
         const handleNewMessage = (message: Message) => {
 
-          if ( message.conversationId !== conversationId ) {
-
+          if (message.conversationId !== conversationId) {
             return;
-          }
-
-          if (socket.connected) {
-            markConversationAsRead(socket);
           }
 
           setMessages(
             (previousMessages) => {
               const exists = previousMessages.some(
-                  (existingMessage) => existingMessage.id === message.id
-                );
+                (existingMessage) => existingMessage.id === message.id
+              );
 
               if (exists) {
                 return previousMessages;
@@ -203,8 +187,27 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
               return [...previousMessages, message,];
             }
           );
-          void fetch(`/api/conversations/${conversationId}/read`, { method: "POST", });
         };
+
+        const handleMessageRead = (data: {
+          messageId: string;
+          conversationId: string;
+          userId: string;
+          readAt: string;
+        }) => {
+          if (
+            data.conversationId !== conversationId
+          ) {
+            return;
+          }
+
+          setReadMessages((previous) => {
+            const next = new Set(previous);
+            next.add(data.messageId);
+            return next;
+          });
+        };
+
 
         /*
          * Socket connected
@@ -217,12 +220,6 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
 
           setSocketReady(true);
 
-          /*
-           * A reconnect creates a new
-           * Socket.IO connection, so the
-           * conversation room must be
-           * joined again.
-           */
           joined = false;
           setRoomReady(false);
 
@@ -261,39 +258,24 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
           setRoomReady(false);
         };
 
-        socket.on(
-          "message:new",
-          handleNewMessage
-        );
+        socket.on("message:new", handleNewMessage);
 
-        socket.on(
-          "connect",
-          handleConnect
-        );
+        socket.on("connect", handleConnect);
 
-        socket.on(
-          "disconnect",
-          handleDisconnect
-        );
+        socket.on("message:read", handleMessageRead);
 
-        socket.on(
-          "connect_error",
-          handleConnectError
-        );
+        socket.on("disconnect", handleDisconnect);
+
+        socket.on("connect_error", handleConnectError);
 
         if (socket.connected) {
-          console.log(
-            "🟢 Socket already connected:",
-            socket.id
-          );
+          console.log("🟢 Socket already connected:", socket.id);
 
           setSocketReady(true);
 
           joinConversation();
         } else {
-          console.log(
-            "🟡 Socket not connected yet. Waiting for connect..."
-          );
+          console.log("🟡 Socket not connected yet. Waiting for connect...");
 
           setSocketReady(false);
           setRoomReady(false);
@@ -310,30 +292,15 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
 
           if (currentSocket) {
 
-            currentSocket.emit(
-              "conversation:leave",
-              conversationId
-            );
+            currentSocket.emit("conversation:leave", conversationId);
 
-            currentSocket.off(
-              "message:new",
-              handleNewMessage
-            );
+            currentSocket.off("message:new", handleNewMessage);
 
-            currentSocket.off(
-              "connect",
-              handleConnect
-            );
+            currentSocket.off("connect", handleConnect);
+            currentSocket.off("message:read", handleMessageRead);
 
-            currentSocket.off(
-              "disconnect",
-              handleDisconnect
-            );
-
-            currentSocket.off(
-              "connect_error",
-              handleConnectError
-            );
+            currentSocket.off("disconnect", handleDisconnect);
+            currentSocket.off("connect_error", handleConnectError);
           }
 
           socketRef.current = null;
@@ -358,69 +325,60 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
     };
   }, [conversationId]);
 
-  useEffect(() => {
-    async function markAsRead() {
-      try {
-        const response = await fetch(`/api/conversations/${conversationId}/read`,
-          {
-            method: "POST",
-          }
-        );
-
-        if (!response.ok) {
-          console.error(
-            "Failed to mark conversation as read:",
-            response.status
-          );
-
-          return;
-        }
-
-        console.log(
-          "✅ Conversation marked as read:",
-          conversationId
-        );
-      } catch (error) {
-        console.error(
-          "Mark conversation read error:",
-          error
-        );
-      }
-    }
-
-    void markAsRead();
-  }, [conversationId]);
-
-  function markConversationAsRead(
-    socket: Socket
-  ) {
-    if (
-      !socket.connected ||
-      !conversationId
-    ) {
+  function markConversationAsRead(socket: Socket) {
+    if (!socket.connected || !conversationId) {
       return;
     }
 
-    socket.emit(
-      "conversation:read",
-      conversationId,
-      (response: SocketResponse) => {
-        if (!response.success) {
-          console.error(
-            "❌ Failed to mark conversation as read:",
-            response.error
-          );
+    socket.emit("conversation:read", conversationId);
+  }
 
-          return;
-        }
+  function markMessageAsRead(socket: Socket, messageId: string) {
+    if (!socket.connected || !messageId) {
+      return;
+    }
 
-        console.log(
-          "📖 Conversation marked as read:",
-          conversationId
+    if (readMessagesRef.current.has(messageId)) {
+      return;
+    }
+
+    readMessagesRef.current.add(messageId);
+
+    socket.emit("message:read", messageId, (response: SocketResponse) => {
+      if (!response.success) {
+
+        readMessagesRef.current.delete(
+          messageId
         );
+
+        console.error("❌ Failed to mark message as read:",
+          {
+            messageId,
+            error: response.error,
+          }
+        );
+        return;
       }
+      console.log("📖 Message marked as read:", messageId);
+    }
     );
   }
+
+  useEffect(() => {
+    const socket = socketRef.current;
+
+    if (!socket || !socket.connected || !roomReady) {
+      return;
+    }
+
+    for (const message of messages) {
+      if (message.senderId === currentUserId) {
+        continue;
+      }
+
+      markMessageAsRead(socket, message.id);
+    }
+  }, [messages, currentUserId, roomReady]);
 
   /*
    * Auto-scroll
@@ -465,8 +423,7 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
         return;
       }
 
-      socket.emit(
-        "send_message",
+      socket.emit("send_message",
         {
           conversationId,
           content: trimmed,
@@ -569,16 +526,34 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
                       {!own && (
                         <p className="mb-1 text-xs font-medium opacity-60">
                           {
-                            message
-                              .sender
-                              .username
+                            message.sender.username
                           }
                         </p>
                       )}
 
-                      <p className="wrap-break-word text-sm">
-                        {message.content}
-                      </p>
+                      <div className="flex items-end gap-2">
+                        <p className="wrap-break-word text-sm">
+                          {message.content}
+                        </p>
+
+                        {own && (
+                          <span
+                            className={`text-[11px] ${readMessages.has(message.id)
+                              ? "text-blue-900"
+                              : "text-slate-700"
+                              }`}
+                            title={
+                              readMessages.has(message.id)
+                                ? "Read"
+                                : "Sent"
+                            }
+                          >
+                            {readMessages.has(message.id)
+                              ? "✓✓"
+                              : "✓"}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );

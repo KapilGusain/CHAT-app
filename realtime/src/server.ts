@@ -7,14 +7,13 @@ import { Server } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 
 import { connectValkey, pubClient, subClient } from "./redis.js";
-
 import { addConnection, removeConnection } from "./presence.js";
-
 import { verifyRealtimeToken, } from "./auth.js";
 
 import { prisma } from "@chat/db";
 
 import { isConversationMember, markConversationAsRead, getConversation, } from "./services/conversation.js";
+import { markMessageAsRead } from "./services/message.js";
 
 dotenv.config({
   path: path.resolve(
@@ -308,71 +307,66 @@ io.on("connection", async (socket) => {
    * JOIN CONVERSATION
    */
 
-  socket.on(
-    "conversation:join",
-    async (
-      conversationId: string,
-      callback?: (
-        response: {
-          success: boolean;
-          error?: string;
-        }
-      ) => void
-    ) => {
-      try {
-        const userId =
-          socket.data.userId as string;
+  socket.on("conversation:join", async (
+    conversationId: string,
+    callback?: (
+      response: {
+        success: boolean;
+        error?: string;
+      }
+    ) => void
+  ) => {
+    try {
+      const userId =
+        socket.data.userId as string;
 
-        if (
-          typeof conversationId !==
-          "string" ||
-          !conversationId.trim()
-        ) {
-          return callback?.({
-            success: false,
-            error:
-              "Conversation ID is required",
-          });
-        }
-
-        const member =
-          await isConversationMember(
-            conversationId,
-            userId
-          );
-
-        if (!member) {
-          return callback?.({
-            success: false,
-            error:
-              "You are not a member of this conversation",
-          });
-        }
-
-        const room =
-          `conversation:${conversationId}`;
-
-        await socket.join(room);
-
-        console.log(
-          "Socket joined room");
-
-        callback?.({
-          success: true,
-        });
-      } catch (error) {
-        console.error(
-          " conversation:join error:",
-          error
-        );
-
-        callback?.({
+      if (
+        typeof conversationId !==
+        "string" ||
+        !conversationId.trim()
+      ) {
+        return callback?.({
           success: false,
           error:
-            "Unable to join conversation",
+            "Conversation ID is required",
         });
       }
+
+      const member = await isConversationMember(
+        conversationId,
+        userId
+      );
+
+      if (!member) {
+        return callback?.({
+          success: false,
+          error:
+            "You are not a member of this conversation",
+        });
+      }
+
+      const room = `conversation:${conversationId}`;
+
+      await socket.join(room);
+
+      console.log("Socket joined room");
+
+      callback?.({
+        success: true,
+      });
+    } catch (error) {
+      console.error(
+        " conversation:join error:",
+        error
+      );
+
+      callback?.({
+        success: false,
+        error:
+          "Unable to join conversation",
+      });
     }
+  }
 
   );
 
@@ -380,10 +374,81 @@ io.on("connection", async (socket) => {
  * MARK AS READ
  */
 
-  socket.on(
-    "conversation:read",
+  socket.on("conversation:read", async (
+    conversationId: string,
+    callback?: (
+      response: {
+        success: boolean;
+        error?: string;
+      }
+    ) => void
+  ) => {
+    try {
+      const userId = socket.data.userId as string;
+
+      if (
+        typeof conversationId !== "string" ||
+        !conversationId.trim()
+      ) {
+        return callback?.({
+          success: false,
+          error: "Conversation ID is required",
+        });
+      }
+
+      const member = await isConversationMember(
+        conversationId,
+        userId
+      );
+
+      if (!member) {
+        return callback?.({
+          success: false,
+          error:
+            "You are not a member of this conversation",
+        });
+      }
+
+      await markConversationAsRead(
+        conversationId,
+        userId
+      );
+
+      /*
+       * Notify this user's other tabs/windows.
+       */
+      io.to(`user:${userId}`).emit("conversation:read",
+        {
+          conversationId,
+          userId,
+        }
+      );
+
+      callback?.({
+        success: true,
+      });
+    } catch (error) {
+      console.error(
+        "conversation:read error:",
+        error
+      );
+
+      callback?.({
+        success: false,
+        error:
+          "Unable to mark conversation as read",
+      });
+    }
+  }
+  );
+
+  /*
+ * MARK MESSAGE AS READ
+ */
+
+  socket.on("message:read",
     async (
-      conversationId: string,
+      messageId: string,
       callback?: (
         response: {
           success: boolean;
@@ -396,42 +461,33 @@ io.on("connection", async (socket) => {
           socket.data.userId as string;
 
         if (
-          typeof conversationId !== "string" ||
-          !conversationId.trim()
+          typeof messageId !== "string" ||
+          !messageId.trim()
         ) {
           return callback?.({
             success: false,
-            error: "Conversation ID is required",
+            error: "Message ID is required",
           });
         }
 
-        const member =
-          await isConversationMember(
-            conversationId,
+        const result = await markMessageAsRead(
+            messageId,
             userId
           );
 
-        if (!member) {
+        if (!result) {
           return callback?.({
-            success: false,
-            error:
-              "You are not a member of this conversation",
+            success: true,
           });
         }
 
-        await markConversationAsRead(
-          conversationId,
-          userId
-        );
-
-        /*
-         * Notify this user's other tabs/windows.
-         */
-        io.to(`user:${userId}`).emit(
-          "conversation:read",
+        io.to(`user:${result.senderId}`).emit(
+          "message:read",
           {
-            conversationId,
+            messageId: result.messageId,
+            conversationId: result.conversationId,
             userId,
+            readAt: result.readAt.toISOString(),
           }
         );
 
@@ -440,14 +496,16 @@ io.on("connection", async (socket) => {
         });
       } catch (error) {
         console.error(
-          "conversation:read error:",
+          "message:read error:",
           error
         );
 
         callback?.({
           success: false,
           error:
-            "Unable to mark conversation as read",
+            error instanceof Error
+              ? error.message
+              : "Unable to mark message as read",
         });
       }
     }
@@ -457,8 +515,7 @@ io.on("connection", async (socket) => {
    * LEAVE CONVERSATION
    */
 
-  socket.on(
-    "conversation:leave",
+  socket.on("conversation:leave",
     async (
       conversationId: string
     ) => {
@@ -476,8 +533,7 @@ io.on("connection", async (socket) => {
    * DISCONNECT 
    */
 
-  socket.on(
-    "disconnect",
+  socket.on("disconnect",
     async (reason) => {
       console.log(
         `🟠 User ${userId} disconnected`,
@@ -495,8 +551,7 @@ io.on("connection", async (socket) => {
         );
 
       if (!stillOnline) {
-        io.emit(
-          "presence:update",
+        io.emit("presence:update",
           {
             userId,
             status: "OFFLINE",
@@ -505,8 +560,6 @@ io.on("connection", async (socket) => {
       }
     }
   );
-
-  await socket.join(`user:${userId}`);
 
   void addConnection(userId, socket.id)
     .then(() => {
