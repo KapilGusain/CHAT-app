@@ -54,17 +54,51 @@ export async function GET(
             avatarUrl: true,
           },
         },
+
+        reads: {
+          where: {
+            userId: {
+              not: session.user.id,
+            },
+          },
+
+          select: {
+            id: true,
+            userId: true,
+            readAt: true,
+          },
+        },
       },
 
       orderBy: {
-        createdAt: "asc",
+        createdAt: "desc",
       },
 
       take: 50,
     });
+    messages.reverse();
+
+    const messagesWithReadState = messages.map(
+      (message) => ({
+        id: message.id,
+        conversationId: message.conversationId,
+        senderId: message.senderId,
+        content: message.content,
+        createdAt: message.createdAt,
+        updatedAt: message.updatedAt,
+        deletedAt: message.deletedAt,
+        editedAt: message.editedAt,
+
+        sender: message.sender,
+
+        readByCurrentUser:
+          message.senderId === session.user.id &&
+          message.reads.length > 0,
+      })
+    );
 
     return NextResponse.json({
-      messages,
+      messages: messagesWithReadState,
     });
   } catch (error) {
     console.error(

@@ -65,9 +65,7 @@ export async function POST(
         },
       });
 
-    const lastReadAt =
-      lastMessage?.createdAt ??
-      new Date();
+    const lastReadAt = lastMessage?.createdAt ?? new Date();
 
     await prisma.conversationMember.update({
       where: {

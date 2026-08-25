@@ -13,7 +13,7 @@ import { verifyRealtimeToken, } from "./auth.js";
 import { prisma } from "@chat/db";
 
 import { isConversationMember, markConversationAsRead, getConversation, } from "./services/conversation.js";
-import { markMessageAsRead } from "./services/message.js";
+import { markMessageAsRead, deleteMessage, editMessage } from "./services/message.js";
 
 dotenv.config({
   path: path.resolve(
@@ -43,6 +43,24 @@ app.get("/health", (_req, res) => {
     status: "ok",
     service: "realtime",
   });
+});
+
+app.post("/internal/emit", (req, res) => {
+  const internalSecret = process.env.REALTIME_INTERNAL_SECRET;
+
+  if (!internalSecret || req.headers["x-internal-secret"] !== internalSecret) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const { room, event, payload } = req.body ?? {};
+
+  if (typeof room !== "string" || typeof event !== "string") {
+    return res.status(400).json({ error: "room and event are required" });
+  }
+
+  io.to(room).emit(event, payload);
+
+  return res.json({ success: true });
 });
 
 const httpServer = createServer(app);
@@ -276,7 +294,7 @@ io.on("connection", async (socket) => {
           if (member.userId === userId) {
             continue;
           }
-          io.to(`user:${member.userId}`).emit("conversation:updated", messagePayload);
+          
           io.to(`user:${member.userId}`).emit("conversation:unread",
             {
               conversationId,
@@ -471,9 +489,9 @@ io.on("connection", async (socket) => {
         }
 
         const result = await markMessageAsRead(
-            messageId,
-            userId
-          );
+          messageId,
+          userId
+        );
 
         if (!result) {
           return callback?.({
@@ -510,6 +528,231 @@ io.on("connection", async (socket) => {
       }
     }
   );
+
+  /*
+ * DELETE MESSAGE
+ * Deletes message for both users.
+ */
+
+  socket.on("message:delete",
+    async (
+      messageId: string,
+      callback?: (
+        response: {
+          success: boolean;
+          error?: string;
+        }
+      ) => void
+    ) => {
+      try {
+        const userId =
+          socket.data.userId as string;
+
+        if (
+          typeof messageId !== "string" ||
+          !messageId.trim()
+        ) {
+          return callback?.({
+            success: false,
+            error: "Message ID is required",
+          });
+        }
+
+        const result =
+          await deleteMessage(
+            messageId,
+            userId
+          );
+
+        if (!result) {
+          return callback?.({
+            success: true,
+          });
+        }
+
+        const conversation =
+          await prisma.conversation.findUnique({
+            where: {
+              id: result.conversationId,
+            },
+            select: {
+              members: {
+                select: {
+                  userId: true,
+                },
+              },
+            },
+          });
+
+        if (!conversation) {
+          return callback?.({
+            success: false,
+            error: "Conversation not found",
+          });
+        }
+
+        const deletePayload = {
+          messageId: result.id,
+          conversationId:
+            result.conversationId,
+          deletedAt:
+            result.deletedAt?.toISOString() ??
+            new Date().toISOString(),
+        };
+
+        for (const member of conversation.members) {
+          io.to(`user:${member.userId}`).emit(
+            "message:deleted",
+            deletePayload
+          );
+        }
+
+        callback?.({
+          success: true,
+        });
+      } catch (error) {
+        console.error(
+          "message:delete error:",
+          error
+        );
+
+        callback?.({
+          success: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Unable to delete message",
+        });
+      }
+    }
+  );
+
+  /*
+ * EDIT MESSAGE
+ */
+
+  socket.on("message:edit",
+    async (
+      payload: {
+        messageId?: string;
+        content?: string;
+      },
+      callback?: (
+        response: {
+          success: boolean;
+          error?: string;
+        }
+      ) => void
+    ) => {
+      try {
+        const userId =
+          socket.data.userId as string;
+
+        const messageId =
+          typeof payload?.messageId === "string"
+            ? payload.messageId.trim()
+            : "";
+
+        const content =
+          typeof payload?.content === "string"
+            ? payload.content.trim()
+            : "";
+
+        if (!messageId) {
+          return callback?.({
+            success: false,
+            error: "Message ID is required",
+          });
+        }
+
+        if (!content) {
+          return callback?.({
+            success: false,
+            error: "Message cannot be empty",
+          });
+        }
+
+        if (content.length > 5000) {
+          return callback?.({
+            success: false,
+            error: "Message is too long",
+          });
+        }
+
+        const result =
+          await editMessage(
+            messageId,
+            userId,
+            content
+          );
+
+        const conversation =
+          await prisma.conversation.findUnique({
+            where: {
+              id: result.conversationId,
+            },
+            select: {
+              members: {
+                select: {
+                  userId: true,
+                },
+              },
+            },
+          });
+
+        if (!conversation) {
+          return callback?.({
+            success: false,
+            error: "Conversation not found",
+          });
+        }
+
+        const editPayload = {
+          id: result.id,
+          conversationId:
+            result.conversationId,
+          senderId:
+            result.senderId,
+          content:
+            result.content,
+          createdAt:
+            result.createdAt.toISOString(),
+          updatedAt:
+            result.updatedAt.toISOString(),
+          deletedAt:
+            result.deletedAt,
+          editedAt:
+            result.editedAt?.toISOString() ??
+            null,
+        };
+
+        for (const member of conversation.members) {
+          io.to(`user:${member.userId}`).emit(
+            "message:edited",
+            editPayload
+          );
+        }
+
+        callback?.({
+          success: true,
+        });
+      } catch (error) {
+        console.error(
+          "message:edit error:",
+          error
+        );
+
+        callback?.({
+          success: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Unable to edit message",
+        });
+      }
+    }
+  );
+
 
   /*
    * LEAVE CONVERSATION

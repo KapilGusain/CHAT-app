@@ -15,10 +15,9 @@ export async function GET() {
 
     const conversations = await prisma.conversation.findMany({
       where: {
+        type: "DIRECT",
         members: {
-          some: {
-            userId: session.user.id,
-          },
+          some: { userId: session.user.id },
         },
       },
 
@@ -51,6 +50,7 @@ export async function GET() {
             senderId: true,
             createdAt: true,
             deletedAt: true,
+            editedAt: true,
           },
         },
       },

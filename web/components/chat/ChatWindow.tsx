@@ -12,6 +12,8 @@ interface Message {
   content: string;
   createdAt: string;
   updatedAt?: string;
+  deletedAt?: string | null;
+  editedAt?: string | null;
   sender: {
     id: string;
     username: string;
@@ -23,6 +25,7 @@ interface Message {
 interface ChatWindowProps {
   conversationId: string;
   currentUserId: string;
+  chatUserName: string;
 }
 
 interface SocketResponse {
@@ -30,7 +33,7 @@ interface SocketResponse {
   error?: string;
 }
 
-export default function ChatWindow({ conversationId, currentUserId }: ChatWindowProps) {
+export default function ChatWindow({ conversationId, currentUserId, chatUserName }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [content, setContent] = useState("");
 
@@ -38,11 +41,17 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
   const [readMessages, setReadMessages] = useState<Set<string>>(new Set());
 
   const [socketReady, setSocketReady] = useState(false);
-  const [roomReady, setRoomReady] = useState(false);
 
+  const [roomReady, setRoomReady] = useState(false);
   const socketRef = useRef<Socket | null>(null);
+  const roomReadyRef = useRef(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const readMessagesRef = useRef<Set<string>>(new Set());
+
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingContent, setEditingContent] = useState("");
+  const [deleteMessageId, setDeleteMessageId] = useState<string | null>(null);
 
   /*
    * Load existing messages
@@ -72,7 +81,37 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
         const data = await response.json();
 
         if (mounted) {
-          setMessages(data.messages ?? []);
+          const loadedMessages: Message[] = data.messages ?? [];
+
+          const restoredReadMessages = new Set<string>();
+
+          for (const message of loadedMessages) {
+            if (message.senderId === currentUserId && message.readByCurrentUser === true) {
+              restoredReadMessages.add(message.id);
+            }
+          }
+
+          readMessagesRef.current = restoredReadMessages;
+
+          setReadMessages(restoredReadMessages);
+
+          setMessages((previousMessages) => {
+            const merged = new Map<string, Message>();
+
+            for (const message of loadedMessages) {
+              merged.set(message.id, message);
+            }
+
+            for (const message of previousMessages) {
+              merged.set(message.id, message);
+            }
+
+            return Array.from(merged.values()).sort(
+              (a, b) =>
+                new Date(a.createdAt).getTime() -
+                new Date(b.createdAt).getTime()
+            );
+          });
         }
       } catch (error) {
         console.error(
@@ -100,9 +139,6 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
     let mounted = true;
     let currentSocket: Socket | null = null;
     let joined = false;
-
-    readMessagesRef.current.clear();
-    setReadMessages(new Set());
 
     async function setupSocket() {
       try {
@@ -157,6 +193,7 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
 
             joined = true;
 
+            roomReadyRef.current = true;
             setRoomReady(true);
 
             markConversationAsRead(socket);
@@ -169,24 +206,21 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
          * New realtime message
          */
         const handleNewMessage = (message: Message) => {
-
           if (message.conversationId !== conversationId) {
             return;
           }
 
-          setMessages(
-            (previousMessages) => {
-              const exists = previousMessages.some(
-                (existingMessage) => existingMessage.id === message.id
-              );
+          setMessages((previousMessages) => {
+            const exists = previousMessages.some(
+              (existingMessage) => existingMessage.id === message.id
+            );
 
-              if (exists) {
-                return previousMessages;
-              }
-
-              return [...previousMessages, message,];
+            if (exists) {
+              return previousMessages;
             }
-          );
+
+            return [...previousMessages, message];
+          });
         };
 
         const handleMessageRead = (data: {
@@ -208,6 +242,60 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
           });
         };
 
+        const handleMessageDeleted = (data: {
+          messageId: string;
+          conversationId: string;
+          deletedAt: string;
+        }) => {
+          if (
+            data.conversationId !== conversationId
+          ) {
+            return;
+          }
+
+          setMessages((previous) =>
+            previous.map((message) =>
+              message.id === data.messageId
+                ? {
+                  ...message,
+                  content: "",
+                  deletedAt: data.deletedAt,
+                }
+                : message
+            )
+          );
+        };
+
+        const handleMessageEdited = (data: {
+          id: string;
+          conversationId: string;
+          senderId: string;
+          content: string;
+          createdAt: string;
+          updatedAt: string;
+          deletedAt: string | null;
+          editedAt: string | null;
+        }) => {
+          if (
+            data.conversationId !== conversationId
+          ) {
+            return;
+          }
+
+          setMessages((previous) =>
+            previous.map((message) =>
+              message.id === data.id
+                ? {
+                  ...message,
+                  content: data.content,
+                  updatedAt: data.updatedAt,
+                  editedAt: data.editedAt,
+                  deletedAt: data.deletedAt,
+                }
+                : message
+            )
+          );
+        };
 
         /*
          * Socket connected
@@ -221,6 +309,7 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
           setSocketReady(true);
 
           joined = false;
+          roomReadyRef.current = false;
           setRoomReady(false);
 
           joinConversation();
@@ -240,6 +329,7 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
           joined = false;
 
           setSocketReady(false);
+          roomReadyRef.current = false;
           setRoomReady(false);
         };
 
@@ -255,6 +345,7 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
           );
 
           setSocketReady(false);
+          roomReadyRef.current = false;
           setRoomReady(false);
         };
 
@@ -263,6 +354,10 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
         socket.on("connect", handleConnect);
 
         socket.on("message:read", handleMessageRead);
+
+        socket.on("message:edited", handleMessageEdited);
+
+        socket.on("message:deleted", handleMessageDeleted);
 
         socket.on("disconnect", handleDisconnect);
 
@@ -298,6 +393,8 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
 
             currentSocket.off("connect", handleConnect);
             currentSocket.off("message:read", handleMessageRead);
+            currentSocket.off("message:deleted", handleMessageDeleted);
+            currentSocket.off("message:edited", handleMessageEdited);
 
             currentSocket.off("disconnect", handleDisconnect);
             currentSocket.off("connect_error", handleConnectError);
@@ -361,6 +458,99 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
       }
       console.log("📖 Message marked as read:", messageId);
     }
+    );
+  }
+
+  function requestDeleteMessage(
+    messageId: string
+  ) {
+    setDeleteMessageId(messageId);
+  }
+
+  function confirmDeleteMessage() {
+    const socket = socketRef.current;
+
+    if (
+      !socket ||
+      !socket.connected ||
+      !deleteMessageId
+    ) {
+      return;
+    }
+
+    socket.emit(
+      "message:delete",
+      deleteMessageId,
+      (response: SocketResponse) => {
+        if (!response.success) {
+          console.error(
+            "❌ Failed to delete message:",
+            response.error
+          );
+          return;
+        }
+
+        setDeleteMessageId(null);
+      }
+    );
+  }
+
+  function cancelDeleteMessage() {
+    setDeleteMessageId(null);
+  }
+
+  function startEditingMessage(
+    message: Message
+  ) {
+    if (
+      message.senderId !== currentUserId ||
+      message.deletedAt
+    ) {
+      return;
+    }
+
+    setEditingMessageId(message.id);
+    setEditingContent(message.content);
+  }
+
+  function cancelEditingMessage() {
+    setEditingMessageId(null);
+    setEditingContent("");
+  }
+
+  function saveEditedMessage() {
+    const socket = socketRef.current;
+
+    const trimmed =
+      editingContent.trim();
+
+    if (
+      !socket ||
+      !socket.connected ||
+      !editingMessageId ||
+      !trimmed
+    ) {
+      return;
+    }
+
+    socket.emit(
+      "message:edit",
+      {
+        messageId: editingMessageId,
+        content: trimmed,
+      },
+      (response: SocketResponse) => {
+        if (!response.success) {
+          console.error(
+            "❌ Failed to edit message:",
+            response.error
+          );
+          return;
+        }
+
+        setEditingMessageId(null);
+        setEditingContent("");
+      }
     );
   }
 
@@ -457,9 +647,9 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
 
       {/* Header */}
       <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-        <div>
-          <h2 className="font-semibold text-white">
-            Conversation
+        <div className="min-w-0">
+          <h2 className="truncate font-semibold text-white">
+            {chatUserName}
           </h2>
 
           <p className="mt-1 text-xs text-slate-500">
@@ -531,29 +721,94 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
                         </p>
                       )}
 
-                      <div className="flex items-end gap-2">
-                        <p className="wrap-break-word text-sm">
-                          {message.content}
-                        </p>
-
-                        {own && (
-                          <span
-                            className={`text-[11px] ${readMessages.has(message.id)
-                              ? "text-blue-900"
-                              : "text-slate-700"
-                              }`}
-                            title={
-                              readMessages.has(message.id)
-                                ? "Read"
-                                : "Sent"
+                      {own && !message.deletedAt && (
+                        <div className="mb-2 flex justify-end gap-1">
+                          <button
+                            onClick={() =>
+                              startEditingMessage(message)
                             }
+                            className="rounded-md px-2 py-1 text-[10px] text-slate-700 hover:bg-black/10"
                           >
-                            {readMessages.has(message.id)
-                              ? "✓✓"
-                              : "✓"}
-                          </span>
-                        )}
-                      </div>
+                            Edit
+                          </button>
+
+                          <button
+                            onClick={() =>
+                              requestDeleteMessage(message.id)
+                            }
+                            className="rounded-md px-2 py-1 text-[10px] text-red-700 hover:bg-black/10"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
+
+                      {message.deletedAt ? (
+                        <p className="text-sm italic opacity-60">
+                          This message was deleted
+                        </p>
+                      ) : editingMessageId === message.id ? (
+                        <div className="min-w-[240px]">
+                          <textarea
+                            value={editingContent}
+                            onChange={(event) =>
+                              setEditingContent(
+                                event.target.value
+                              )
+                            }
+                            autoFocus
+                            className="w-full resize-none rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400"
+                            rows={3}
+                          />
+
+                          <div className="mt-2 flex justify-end gap-2">
+                            <button
+                              onClick={cancelEditingMessage}
+                              className="rounded-lg px-3 py-1.5 text-xs text-slate-400 hover:bg-white/10"
+                            >
+                              Cancel
+                            </button>
+
+                            <button
+                              onClick={saveEditedMessage}
+                              disabled={!editingContent.trim()}
+                              className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-50"
+                            >
+                              Save
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-end gap-2">
+                          <p className="wrap-break-word text-sm">
+                            {message.content}
+                          </p>
+
+                          {message.editedAt && (
+                            <span className="shrink-0 text-[10px] opacity-50">
+                              edited
+                            </span>
+                          )}
+
+                          {own && (
+                            <span
+                              className={`text-[11px] ${readMessages.has(message.id)
+                                ? "text-blue-900"
+                                : "text-slate-700"
+                                }`}
+                              title={
+                                readMessages.has(message.id)
+                                  ? "Read"
+                                  : "Sent"
+                              }
+                            >
+                              {readMessages.has(message.id)
+                                ? "✓✓"
+                                : "✓"}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -608,6 +863,35 @@ export default function ChatWindow({ conversationId, currentUserId }: ChatWindow
           </button>
         </div>
       </div>
+      {deleteMessageId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-slate-900 p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-white">
+              Delete message?
+            </h3>
+
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              Message deleted will be deleted for both users.
+            </p>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={cancelDeleteMessage}
+                className="rounded-xl border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/5"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={confirmDeleteMessage}
+                className="rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-400"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

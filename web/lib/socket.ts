@@ -3,6 +3,31 @@ import { io, Socket } from "socket.io-client";
 let socket: Socket | null = null;
 let socketPromise: Promise<Socket> | null = null;
 
+async function fetchRealtimeToken(): Promise<string> {
+  const response = await fetch("/api/realtime/token", {
+    method: "GET",
+    credentials: "include",
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error(
+        "You must be signed in to connect to realtime services"
+      );
+    }
+    throw new Error(`Failed to obtain realtime token (${response.status})`);
+  }
+
+  const data: { token?: string } = await response.json();
+
+  if (!data.token) {
+    throw new Error("Realtime token missing from server response");
+  }
+
+  return data.token;
+}
+
 export async function getSocket(): Promise<Socket> {
   if (socket) {
     return socket;
@@ -24,50 +49,26 @@ export async function getSocket(): Promise<Socket> {
 }
 
 async function initializeSocket(): Promise<Socket> {
-  const response = await fetch(
-    "/api/realtime/token",
-    {
-      method: "GET",
-      credentials: "include",
-      cache: "no-store",
-    }
-  );
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error(
-        "You must be signed in to connect to realtime services"
-      );
-    }
-
-    throw new Error(
-      `Failed to obtain realtime token (${response.status})`
-    );
-  }
-
-  const data: {
-    token?: string;
-  } = await response.json();
-
-  if (!data.token) {
-    throw new Error(
-      "Realtime token missing from server response"
-    );
-  }
+  
+  await fetchRealtimeToken();
 
   const socketUrl =
-    process.env.NEXT_PUBLIC_SOCKET_URL ??
-    "http://localhost:5000";
+    process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:5000";
 
   return io(socketUrl, {
     autoConnect: false,
 
-    auth: {
-      token: data.token,
+    auth: async (callback) => {
+      try {
+        const token = await fetchRealtimeToken();
+        callback({ token });
+      } catch (error) {
+        console.error("Failed to refresh realtime token:", error);
+        callback({}); // let the server reject cleanly
+      }
     },
 
     withCredentials: true,
-
     transports: ["websocket"],
   });
 }

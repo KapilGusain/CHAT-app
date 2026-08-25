@@ -19,22 +19,49 @@ export default async function ChatConversationPage({
     redirect("/login");
   }
 
-  const { conversationId } =
-    await params;
+  const { conversationId } = await params;
 
-  const membership =
-    await prisma.conversationMember.findUnique({
-      where: {
-        conversationId_userId: {
-          conversationId,
-          userId: session.user.id,
+  const conversation = await prisma.conversation.findUnique({
+    where: {
+      id: conversationId,
+    },
+    include: {
+      members: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              username: true,
+              avatarUrl: true,
+              status: true,
+              lastSeenAt: true,
+            },
+          },
         },
       },
-    });
+    },
+  });
 
-  if (!membership) {
+  if (!conversation) {
     notFound();
   }
+
+  const isMember = conversation.members.some(
+    (member) => member.userId === session.user.id
+  );
+
+  if (!isMember) {
+    notFound();
+  }
+
+  const otherMember = conversation.members.find(
+    (member) => member.userId !== session.user.id
+  );
+
+  const chatUserName =
+    conversation.type === "GROUP"
+      ? conversation.name ?? "Unnamed group"
+      : otherMember?.user.username ?? "Unknown user";
 
   return (
     <main className="min-h-screen">
@@ -42,6 +69,7 @@ export default async function ChatConversationPage({
         <ChatWindow
           conversationId={conversationId}
           currentUserId={session.user.id}
+          chatUserName={chatUserName}
         />
       </div>
     </main>

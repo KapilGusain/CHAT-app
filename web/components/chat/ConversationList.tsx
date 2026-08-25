@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { getSocket } from "@/lib/socket";
 import type { Socket } from "socket.io-client";
+import { signOut } from "next-auth/react";
 
 interface User {
   id: string;
@@ -27,6 +28,7 @@ interface LastMessage {
   senderId: string;
   createdAt: string;
   deletedAt: string | null;
+  editedAt: string | null;
 }
 
 interface Conversation {
@@ -42,120 +44,57 @@ interface Conversation {
 
 interface ConversationListProps {
   currentUserId: string;
+  currentUsername: string;
 }
 
-export default function ConversationList({ currentUserId, }: ConversationListProps) {
+export default function ConversationList({ currentUserId, currentUsername }: ConversationListProps) {
   const router = useRouter();
   const pathname = usePathname();
 
-  const [conversations, setConversations] =
-    useState<Conversation[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [loading, setLoading] = useState(true);
 
-  const [error, setError] =
-    useState("");
-
+  const [error, setError] = useState("");
+  
   useEffect(() => {
-    let mounted = true;
-    let socket: Socket | null = null;
+  let mounted = true;
 
-    async function loadConversations() {
-      try {
-        const response = await fetch(
-          "/api/conversations",
-          {
-            cache: "no-store",
-          }
-        );
+  async function loadConversations() {
+    try {
+      const response = await fetch("/api/conversations", {
+        cache: "no-store",
+      });
 
-        if (!response.ok) {
-          throw new Error(
-            "Failed to load conversations"
-          );
-        }
+      if (!response.ok) {
+        throw new Error("Failed to load conversations");
+      }
 
-        const data =
-          await response.json();
+      const data = await response.json();
 
-        if (mounted) {
-          setConversations(
-            data.conversations ?? []
-          );
+      if (mounted) {
+        setConversations(data.conversations ?? []);
+        setError("");
+      }
+    } catch (error) {
+      console.error("Load conversations error:", error);
 
-          setError("");
-        }
-      } catch (error) {
-        console.error(
-          "Load conversations error:",
-          error
-        );
-
-        if (mounted) {
-          setError(
-            "Unable to load conversations."
-          );
-        }
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
+      if (mounted) {
+        setError("Unable to load conversations.");
+      }
+    } finally {
+      if (mounted) {
+        setLoading(false);
       }
     }
+  }
 
-    async function setupRealtime() {
-      try {
-        socket = await getSocket();
+  void loadConversations();
 
-        if (!mounted) {
-          return;
-        }
-
-        const handleConversationUpdated = () => {
-          console.log(
-            "🔄 Conversation list updated"
-          );
-
-          void loadConversations();
-        };
-
-        socket.on(
-          "conversation:updated",
-          handleConversationUpdated
-        );
-
-        return () => {
-          socket?.off(
-            "conversation:updated",
-            handleConversationUpdated
-          );
-        };
-      } catch (error) {
-        console.error(
-          "Conversation list realtime error:",
-          error
-        );
-      }
-    }
-
-    void loadConversations();
-
-    let realtimeCleanup:
-      | (() => void)
-      | undefined;
-
-    void setupRealtime().then(
-      (cleanup) => {
-        realtimeCleanup = cleanup;
-      }
-    );
-
-    return () => {
-      mounted = false;
-      realtimeCleanup?.();
-    };
-  }, []);
+  return () => {
+    mounted = false;
+  };
+}, []);
 
   useEffect(() => {
     let mounted = true;
@@ -185,41 +124,26 @@ export default function ConversationList({ currentUserId, }: ConversationListPro
             return;
           }
 
-          setConversations(
-            (previousConversations) => {
-              return previousConversations.map(
-                (conversation) => {
-                  if (
-                    conversation.id !==
-                    message.conversationId
-                  ) {
-                    return conversation;
-                  }
+          setConversations((previousConversations) =>
+            previousConversations.map((conversation): Conversation => {
+              if (conversation.id !== message.conversationId) {
+                return conversation;
+              }
 
-                  const isCurrentConversation =
-                    pathname ===
-                    `/chat/${conversation.id}`;
+              const updatedLastMessage: LastMessage = {
+                id: message.id,
+                content: message.content,
+                senderId: message.senderId,
+                createdAt: message.createdAt,
+                deletedAt: message.deletedAt ?? null,
+                editedAt: message.editedAt ?? null,
+              };
 
-                  return {
-                    ...conversation,
-
-                    messages: [
-                      {
-                        id: message.id,
-                        content: message.content,
-                        senderId: message.senderId,
-                        createdAt:
-                          message.createdAt,
-                        deletedAt:
-                          message.deletedAt ?? null,
-                      },
-                    ],
-
-                    unreadCount: conversation.unreadCount,
-                  };
-                }
-              );
-            }
+              return {
+                ...conversation,
+                messages: [updatedLastMessage],
+              };
+            })
           );
         };
 
@@ -264,9 +188,7 @@ export default function ConversationList({ currentUserId, }: ConversationListPro
             return;
           }
 
-          const currentlyViewing =
-            pathname ===
-            `/chat/${conversationId}`;
+          const currentlyViewing = pathname === `/chat/${conversationId}`;
 
           setConversations(
             (previousConversations) =>
@@ -288,8 +210,8 @@ export default function ConversationList({ currentUserId, }: ConversationListPro
                         content: message.content,
                         senderId: message.senderId,
                         createdAt: message.createdAt,
-                        deletedAt:
-                          message.deletedAt ?? null,
+                        deletedAt: message.deletedAt ?? null,
+                        editedAt: message.editedAt ?? null,
                       },
                     ],
 
@@ -303,6 +225,105 @@ export default function ConversationList({ currentUserId, }: ConversationListPro
           );
         };
 
+        const handleMessageDeleted = (data: {
+          messageId: string;
+          conversationId: string;
+          deletedAt: string;
+        }) => {
+          if (!mounted) {
+            return;
+          }
+
+          setConversations(
+            (previousConversations) =>
+              previousConversations.map(
+                (conversation) => {
+                  if (
+                    conversation.id !==
+                    data.conversationId
+                  ) {
+                    return conversation;
+                  }
+
+                  return {
+                    ...conversation,
+
+                    messages:
+                      conversation.messages.map(
+                        (message, index) =>
+                          index === 0 &&
+                            message.id ===
+                            data.messageId
+                            ? {
+                              ...message,
+                              content: "",
+                              deletedAt:
+                                data.deletedAt,
+                            }
+                            : message
+                      ),
+                  };
+                }
+              )
+          );
+        };
+
+        const handleMessageEdited = (message: {
+          id: string;
+          conversationId: string;
+          content: string;
+          editedAt: string | null;
+        }) => {
+          if (!mounted) {
+            return;
+          }
+
+          setConversations(
+            (previousConversations) =>
+              previousConversations.map(
+                (conversation) => {
+                  if (
+                    conversation.id !==
+                    message.conversationId
+                  ) {
+                    return conversation;
+                  }
+
+                  return {
+                    ...conversation,
+
+                    messages:
+                      conversation.messages.map(
+                        (lastMessage, index) =>
+                          index === 0 &&
+                            lastMessage.id ===
+                            message.id
+                            ? {
+                              ...lastMessage,
+                              content:
+                                message.content,
+                              editedAt:
+                                message.editedAt,
+                            }
+                            : lastMessage
+                      ),
+                  };
+                }
+              )
+          );
+        };
+
+        const handleConversationNew = (conversation: Conversation) => {
+          if (!mounted) return;
+
+          setConversations((previous) => {
+            if (previous.some((c) => c.id === conversation.id)) {
+              return previous;
+            }
+            return [{ ...conversation, unreadCount: 0 }, ...previous];
+          });
+        };
+
         socket.on("connect", handleConnect);
 
         socket.on("message:new", handleNewMessage);
@@ -310,6 +331,12 @@ export default function ConversationList({ currentUserId, }: ConversationListPro
         socket.on("conversation:read", handleConversationRead);
 
         socket.on("conversation:unread", handleConversationUnread);
+
+        socket.on("message:deleted", handleMessageDeleted);
+
+        socket.on("message:edited", handleMessageEdited);
+
+        socket.on("conversation:new", handleConversationNew);
 
         if (!socket.connected) {
           socket.connect();
@@ -323,6 +350,12 @@ export default function ConversationList({ currentUserId, }: ConversationListPro
           socket?.off("conversation:read", handleConversationRead);
 
           socket?.off("conversation:unread", handleConversationUnread);
+
+          socket?.off("message:deleted", handleMessageDeleted);
+
+          socket?.off("message:edited", handleMessageEdited);
+
+          socket?.off("conversation:new", handleConversationNew);
         };
       } catch (error) {
         console.error(
@@ -403,13 +436,16 @@ export default function ConversationList({ currentUserId, }: ConversationListPro
 
         <div className="border-b border-white/10 p-5">
           <div className="flex items-center justify-between">
-            <div>
+            <div className="min-w-0">
               <h1 className="text-xl font-bold">
                 Messages
               </h1>
 
-              <p className="mt-1 text-xs text-slate-500">
-                Your conversations
+              <p className="mt-1 truncate text-xs text-slate-500">
+                Signed in as{" "}
+                <span className="font-medium text-slate-300">
+                  {currentUsername}
+                </span>
               </p>
             </div>
 
@@ -417,7 +453,7 @@ export default function ConversationList({ currentUserId, }: ConversationListPro
               onClick={() =>
                 router.push("/chat/new")
               }
-              className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500 text-lg font-bold text-slate-950 transition hover:bg-cyan-400"
+              className="ml-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-500 text-lg font-bold text-slate-950 transition hover:bg-cyan-400"
               title="New conversation"
             >
               +
@@ -519,7 +555,7 @@ export default function ConversationList({ currentUserId, }: ConversationListPro
                           <p className="min-w-0 truncate text-xs text-slate-500">
                             {lastMessage
                               ? lastMessage.deletedAt
-                                ? "Message deleted"
+                                ? "This message was deleted"
                                 : lastMessage.content
                               : "No messages yet"}
                           </p>
@@ -539,6 +575,20 @@ export default function ConversationList({ currentUserId, }: ConversationListPro
               )}
             </div>
           )}
+        </div>
+        {/* Sidebar Footer */}
+
+        <div className="border-t border-white/10 p-4">
+          <button
+            onClick={() =>
+              signOut({
+                callbackUrl: "/login",
+              })
+            }
+            className="flex w-full items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-sm font-medium text-red-400 transition hover:bg-red-500/20 hover:text-red-300"
+          >
+            Logout
+          </button>
         </div>
       </aside>
 

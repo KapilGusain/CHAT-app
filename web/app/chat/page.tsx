@@ -14,6 +14,7 @@ export default async function ChatPage() {
     <main className="min-h-screen">
       <ConversationList
         currentUserId={session.user.id}
+        currentUsername={session.user.name ?? session.user.email ?? "User"}
       />
     </main>
   );

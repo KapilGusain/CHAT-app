@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { emitToUser } from "@/lib/realtime-emit";
 
 export async function POST(request: Request) {
   try {
@@ -93,8 +94,7 @@ export async function POST(request: Request) {
     }
 
     try {
-      const conversation =
-        await prisma.conversation.create({
+      const conversation = await prisma.conversation.create({
           data: {
             type: "DIRECT",
             directKey,
@@ -129,6 +129,7 @@ export async function POST(request: Request) {
             },
           },
         });
+        await emitToUser(otherUserId, "conversation:new", conversation);
 
       return NextResponse.json(
         {
