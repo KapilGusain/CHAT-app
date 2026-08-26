@@ -20,6 +20,7 @@ interface Message {
     avatarUrl: string | null;
   };
   readByCurrentUser?: boolean;
+  deliveryStatus?: "pending" | "sent" | "failed";
 }
 
 interface ChatWindowProps {
@@ -31,6 +32,7 @@ interface ChatWindowProps {
 interface SocketResponse {
   success: boolean;
   error?: string;
+  message?: Message;
 }
 
 export default function ChatWindow({ conversationId, currentUserId, chatUserName }: ChatWindowProps) {
@@ -212,14 +214,47 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
 
           setMessages((previousMessages) => {
             const exists = previousMessages.some(
-              (existingMessage) => existingMessage.id === message.id
+              (existingMessage) =>
+                existingMessage.id === message.id
             );
 
             if (exists) {
               return previousMessages;
             }
 
-            return [...previousMessages, message];
+            /*
+             * If the server event arrives before the
+             * acknowledgement, replace the optimistic
+             * message using matching content.
+             */
+            if (message.senderId === currentUserId) {
+              const optimisticIndex =
+                previousMessages.findIndex(
+                  (existingMessage) =>
+                    existingMessage.deliveryStatus === "pending" &&
+                    existingMessage.senderId === currentUserId &&
+                    existingMessage.content === message.content
+                );
+
+              if (optimisticIndex !== -1) {
+                const next = [...previousMessages];
+
+                next[optimisticIndex] = {
+                  ...message,
+                  deliveryStatus: "sent",
+                };
+
+                return next;
+              }
+            }
+
+            return [
+              ...previousMessages,
+              {
+                ...message,
+                deliveryStatus: "sent",
+              },
+            ];
           });
         };
 
@@ -583,8 +618,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
    * Send message
    */
   async function sendMessage() {
-    const trimmed =
-      content.trim();
+    const trimmed = content.trim();
 
     if (!trimmed) {
       return;
@@ -599,9 +633,8 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
 
       if (!socket.connected) {
         console.error(
-          " Cannot send message: socket is not connected"
+          "Cannot send message: socket is not connected"
         );
-
         return;
       }
 
@@ -609,34 +642,108 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
         console.error(
           "❌ Cannot send message: conversation room is not ready"
         );
-
         return;
       }
 
-      socket.emit("send_message",
+      /*
+       * Create a temporary client-side ID.
+       *
+       * This message exists only in React state.
+       */
+      const optimisticId =
+        `optimistic-${conversationId}-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2)}`;
+
+      /*
+       * Create optimistic message.
+       */
+      const optimisticMessage: Message = {
+        id: optimisticId,
+        conversationId,
+        senderId: currentUserId,
+        content: trimmed,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        deletedAt: null,
+        editedAt: null,
+
+        /*
+         * We already know who the sender is.
+         */
+        sender: {
+          id: currentUserId,
+          username: "You",
+          avatarUrl: null,
+        },
+
+        deliveryStatus: "pending",
+      };
+
+      /*
+       * Immediately show the message.
+       */
+      setMessages((previousMessages) => [
+        ...previousMessages,
+        optimisticMessage,
+      ]);
+
+      /*
+       * Clear the input immediately.
+       */
+      setContent("");
+
+      socket.emit(
+        "send_message",
         {
           conversationId,
           content: trimmed,
         },
-        (
-          response: SocketResponse
-        ) => {
-
-          if (!response.success) {
+        (response: SocketResponse) => {
+          /*
+           * Server rejected the message.
+           */
+          if (!response.success || !response.message) {
             console.error(
               "❌ Failed to send message:",
               response.error
             );
 
+            setMessages((previousMessages) =>
+              previousMessages.map((message) =>
+                message.id === optimisticId
+                  ? {
+                    ...message,
+                    deliveryStatus: "failed",
+                  }
+                  : message
+              )
+            );
+
             return;
           }
 
-          setContent("");
+          /*
+           * Server successfully persisted the message.
+           *
+           * Replace optimistic message with the
+           * actual database message.
+           */
+          setMessages((previousMessages) =>
+            previousMessages.map((message) =>
+              message.id === optimisticId
+                ? {
+                  ...response.message!,
+                  deliveryStatus: "sent",
+                }
+                : message
+            )
+          );
         }
       );
     } catch (error) {
       console.error(
-        " Failed to send message:",
+        "Failed to send message:",
         error
       );
     }
@@ -792,19 +899,29 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
 
                           {own && (
                             <span
-                              className={`text-[11px] ${readMessages.has(message.id)
-                                ? "text-blue-900"
-                                : "text-slate-700"
+                              className={`text-[11px] ${message.deliveryStatus === "failed"
+                                ? "text-red-700"
+                                : readMessages.has(message.id)
+                                  ? "text-blue-900"
+                                  : "text-slate-700"
                                 }`}
                               title={
-                                readMessages.has(message.id)
-                                  ? "Read"
-                                  : "Sent"
+                                message.deliveryStatus === "pending"
+                                  ? "Sending..."
+                                  : message.deliveryStatus === "failed"
+                                    ? "Failed to send"
+                                    : readMessages.has(message.id)
+                                      ? "Read"
+                                      : "Sent"
                               }
                             >
-                              {readMessages.has(message.id)
-                                ? "✓✓"
-                                : "✓"}
+                              {message.deliveryStatus === "pending"
+                                ? "◷"
+                                : message.deliveryStatus === "failed"
+                                  ? "!"
+                                  : readMessages.has(message.id)
+                                    ? "✓✓"
+                                    : "✓"}
                             </span>
                           )}
                         </div>

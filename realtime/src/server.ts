@@ -180,6 +180,21 @@ io.on("connection", async (socket) => {
         response: {
           success: boolean;
           error?: string;
+          message?: {
+            id: string;
+            conversationId: string;
+            senderId: string;
+            content: string;
+            createdAt: string;
+            updatedAt: string;
+            deletedAt: Date | null;
+            editedAt: Date | null;
+            sender: {
+              id: string;
+              username: string;
+              avatarUrl: string | null;
+            };
+          };
         }
       ) => void
     ) => {
@@ -283,27 +298,47 @@ io.on("connection", async (socket) => {
           content: message.content,
           createdAt: message.createdAt.toISOString(),
           updatedAt: message.updatedAt.toISOString(),
+          deletedAt: message.deletedAt,
+          editedAt: message.editedAt,
           sender: message.sender,
         };
 
         const room = `conversation:${conversationId}`;
 
+        /*
+         * Broadcast the persisted message to everyone
+         * currently inside the conversation room.
+         */
         io.to(room).emit("message:new", messagePayload);
 
+        /*
+         * Notify members who are not currently receiving
+         * the conversation room message.
+         */
         for (const member of conversation.members) {
           if (member.userId === userId) {
             continue;
           }
-          
-          io.to(`user:${member.userId}`).emit("conversation:unread",
+
+          io.to(`user:${member.userId}`).emit(
+            "conversation:unread",
             {
               conversationId,
               message: messagePayload,
             }
           );
         }
+
+        /*
+         * Delivery acknowledgement.
+         *
+         * The sender now receives the actual persisted
+         * database message so the client can replace its
+         * optimistic message.
+         */
         callback?.({
           success: true,
+          message: messagePayload,
         });
 
       } catch (error) {
@@ -314,8 +349,7 @@ io.on("connection", async (socket) => {
 
         callback?.({
           success: false,
-          error:
-            "Failed to send message",
+          error: "Failed to send message",
         });
       }
     }
