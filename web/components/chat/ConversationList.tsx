@@ -129,27 +129,41 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
             return;
           }
 
-          setConversations((previousConversations) =>
-            previousConversations.map((conversation): Conversation => {
-              if (conversation.id !== message.conversationId) {
-                return conversation;
-              }
+          setConversations((previousConversations) => {
+            const conversationIndex = previousConversations.findIndex(
+              (conversation) =>
+                conversation.id === message.conversationId
+            );
 
-              const updatedLastMessage: LastMessage = {
-                id: message.id,
-                content: message.content,
-                senderId: message.senderId,
-                createdAt: message.createdAt,
-                deletedAt: message.deletedAt ?? null,
-                editedAt: message.editedAt ?? null,
-              };
+            if (conversationIndex === -1) {
+              return previousConversations;
+            }
 
-              return {
-                ...conversation,
-                messages: [updatedLastMessage],
-              };
-            })
-          );
+            const conversation =
+              previousConversations[conversationIndex];
+
+            const updatedLastMessage: LastMessage = {
+              id: message.id,
+              content: message.content,
+              senderId: message.senderId,
+              createdAt: message.createdAt,
+              deletedAt: message.deletedAt ?? null,
+              editedAt: message.editedAt ?? null,
+            };
+
+            const updatedConversation: Conversation = {
+              ...conversation,
+              updatedAt: message.createdAt,
+              messages: [updatedLastMessage],
+            };
+
+            return [
+              updatedConversation,
+              ...previousConversations.filter(
+                (_, index) => index !== conversationIndex
+              ),
+            ];
+          });
         };
 
         const handleConversationRead = ({ conversationId, userId }: {
@@ -224,38 +238,51 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
             return;
           }
 
-          const currentlyViewing = pathnameRef.current === `/chat/${conversationId}`;
+          const currentlyViewing =
+            pathnameRef.current === `/chat/${conversationId}`;
 
-          setConversations(
-            (previousConversations) =>
-              previousConversations.map(
-                (conversation) => {
-                  if (
-                    conversation.id !==
-                    conversationId
-                  ) {
-                    return conversation;
-                  }
+          setConversations((previousConversations) => {
+            const conversationIndex =
+              previousConversations.findIndex(
+                (conversation) =>
+                  conversation.id === conversationId
+              );
 
-                  return {
-                    ...conversation,
+            if (conversationIndex === -1) {
+              return previousConversations;
+            }
 
-                    messages: [
-                      {
-                        id: message.id,
-                        content: message.content,
-                        senderId: message.senderId,
-                        createdAt: message.createdAt,
-                        deletedAt: message.deletedAt ?? null,
-                        editedAt: message.editedAt ?? null,
-                      },
-                    ],
+            const conversation =
+              previousConversations[conversationIndex];
 
-                    unreadCount: currentlyViewing ? 0 : conversation.unreadCount + 1,
-                  };
-                }
-              )
-          );
+            const updatedConversation: Conversation = {
+              ...conversation,
+
+              updatedAt: message.createdAt,
+
+              messages: [
+                {
+                  id: message.id,
+                  content: message.content,
+                  senderId: message.senderId,
+                  createdAt: message.createdAt,
+                  deletedAt: message.deletedAt ?? null,
+                  editedAt: message.editedAt ?? null,
+                },
+              ],
+
+              unreadCount: currentlyViewing
+                ? 0
+                : conversation.unreadCount + 1,
+            };
+
+            return [
+              updatedConversation,
+              ...previousConversations.filter(
+                (_, index) => index !== conversationIndex
+              ),
+            ];
+          });
         };
 
         const handleMessageDeleted = (data: {
