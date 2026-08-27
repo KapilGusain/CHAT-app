@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { getSocket } from "@/lib/socket";
@@ -52,49 +52,54 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
   const pathname = usePathname();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
-
   const [loading, setLoading] = useState(true);
 
   const [error, setError] = useState("");
-  
+
+  const pathnameRef = useRef(pathname);
+
   useEffect(() => {
-  let mounted = true;
+    pathnameRef.current = pathname;
+  }, [pathname]);
 
-  async function loadConversations() {
-    try {
-      const response = await fetch("/api/conversations", {
-        cache: "no-store",
-      });
+  useEffect(() => {
+    let mounted = true;
 
-      if (!response.ok) {
-        throw new Error("Failed to load conversations");
-      }
+    async function loadConversations() {
+      try {
+        const response = await fetch("/api/conversations", {
+          cache: "no-store",
+        });
 
-      const data = await response.json();
+        if (!response.ok) {
+          throw new Error("Failed to load conversations");
+        }
 
-      if (mounted) {
-        setConversations(data.conversations ?? []);
-        setError("");
-      }
-    } catch (error) {
-      console.error("Load conversations error:", error);
+        const data = await response.json();
 
-      if (mounted) {
-        setError("Unable to load conversations.");
-      }
-    } finally {
-      if (mounted) {
-        setLoading(false);
+        if (mounted) {
+          setConversations(data.conversations ?? []);
+          setError("");
+        }
+      } catch (error) {
+        console.error("Load conversations error:", error);
+
+        if (mounted) {
+          setError("Unable to load conversations.");
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
     }
-  }
 
-  void loadConversations();
+    void loadConversations();
 
-  return () => {
-    mounted = false;
-  };
-}, []);
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -173,6 +178,37 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
           );
         };
 
+        const handlePresenceUpdate = ({ userId, status, lastSeenAt }: {
+          userId: string;
+          status: "ONLINE" | "OFFLINE" | "AWAY";
+          lastSeenAt: string | null;
+        }) => {
+          if (!mounted) {
+            return;
+          }
+
+          setConversations((previousConversations) =>
+            previousConversations.map((conversation) => ({
+              ...conversation,
+
+              members: conversation.members.map((member) =>
+                member.userId === userId
+                  ? {
+                    ...member,
+
+                    user: {
+                      ...member.user,
+                      status,
+                      lastSeenAt,
+                    },
+                  }
+                  : member
+              ),
+            }))
+          );
+        };
+
+
         const handleConversationUnread = ({
           conversationId,
           message,
@@ -188,7 +224,7 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
             return;
           }
 
-          const currentlyViewing = pathname === `/chat/${conversationId}`;
+          const currentlyViewing = pathnameRef.current === `/chat/${conversationId}`;
 
           setConversations(
             (previousConversations) =>
@@ -215,10 +251,7 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
                       },
                     ],
 
-                    unreadCount:
-                      currentlyViewing
-                        ? conversation.unreadCount
-                        : conversation.unreadCount + 1,
+                    unreadCount: currentlyViewing ? 0 : conversation.unreadCount + 1,
                   };
                 }
               )
@@ -330,6 +363,8 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
 
         socket.on("conversation:read", handleConversationRead);
 
+        socket.on("presence:update", handlePresenceUpdate);
+
         socket.on("conversation:unread", handleConversationUnread);
 
         socket.on("message:deleted", handleMessageDeleted);
@@ -348,6 +383,8 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
           socket?.off("message:new", handleNewMessage);
 
           socket?.off("conversation:read", handleConversationRead);
+
+          socket?.off("presence:update", handlePresenceUpdate);
 
           socket?.off("conversation:unread", handleConversationUnread);
 
@@ -375,7 +412,7 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
         (cleanup) => cleanup?.()
       );
     };
-  }, [currentUserId, pathname]);
+  }, [currentUserId]);
 
   function getOtherMember(
     conversation: Conversation

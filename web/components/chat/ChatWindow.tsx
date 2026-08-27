@@ -19,7 +19,7 @@ interface Message {
     username: string;
     avatarUrl: string | null;
   };
-  readByCurrentUser?: boolean;
+  readByOtherUser?: boolean;
   deliveryStatus?: "pending" | "sent" | "failed";
 }
 
@@ -40,8 +40,10 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
   const [content, setContent] = useState("");
 
   const [loading, setLoading] = useState(true);
-  const [readMessages, setReadMessages] = useState<Set<string>>(new Set());
+  const [loadingPrevious, setLoadingPrevious] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
 
+  const [readMessages, setReadMessages] = useState<Set<string>>(new Set());
   const [socketReady, setSocketReady] = useState(false);
 
   const [roomReady, setRoomReady] = useState(false);
@@ -50,6 +52,10 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const readMessagesRef = useRef<Set<string>>(new Set());
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  const shouldScrollToBottomRef = useRef(true);
+  const restoringOlderMessagesRef = useRef(false);
 
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
@@ -65,7 +71,8 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
       setLoading(true);
 
       try {
-        const response = await fetch(`/api/conversations/${conversationId}/messages`,
+        const response = await fetch(
+          `/api/conversations/${conversationId}/messages`,
           {
             cache: "no-store",
           }
@@ -73,7 +80,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
 
         if (!response.ok) {
           console.error(
-            " Failed to load messages:",
+            "Failed to load messages:",
             response.status
           );
 
@@ -82,42 +89,34 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
 
         const data = await response.json();
 
-        if (mounted) {
-          const loadedMessages: Message[] = data.messages ?? [];
-
-          const restoredReadMessages = new Set<string>();
-
-          for (const message of loadedMessages) {
-            if (message.senderId === currentUserId && message.readByCurrentUser === true) {
-              restoredReadMessages.add(message.id);
-            }
-          }
-
-          readMessagesRef.current = restoredReadMessages;
-
-          setReadMessages(restoredReadMessages);
-
-          setMessages((previousMessages) => {
-            const merged = new Map<string, Message>();
-
-            for (const message of loadedMessages) {
-              merged.set(message.id, message);
-            }
-
-            for (const message of previousMessages) {
-              merged.set(message.id, message);
-            }
-
-            return Array.from(merged.values()).sort(
-              (a, b) =>
-                new Date(a.createdAt).getTime() -
-                new Date(b.createdAt).getTime()
-            );
-          });
+        if (!mounted) {
+          return;
         }
+
+        const loadedMessages: Message[] = data.messages ?? [];
+
+        setMessages(loadedMessages);
+
+        setHasMoreMessages(data.hasMore === true);
+
+        const restoredReadMessages = new Set<string>();
+
+        for (const message of loadedMessages) {
+          if (
+            message.senderId === currentUserId &&
+            message.readByOtherUser === true
+          ) {
+            restoredReadMessages.add(message.id);
+          }
+        }
+
+        readMessagesRef.current = restoredReadMessages;
+        setReadMessages(restoredReadMessages);
+
+        shouldScrollToBottomRef.current = true;
       } catch (error) {
         console.error(
-          " Failed to load messages:",
+          "Failed to load messages:",
           error
         );
       } finally {
@@ -127,12 +126,12 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
       }
     }
 
-    loadMessages();
+    void loadMessages();
 
     return () => {
       mounted = false;
     };
-  }, [conversationId]);
+  }, [conversationId, currentUserId]);
 
   /*
    * Socket lifecycle
@@ -211,6 +210,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           if (message.conversationId !== conversationId) {
             return;
           }
+          shouldScrollToBottomRef.current = true;
 
           setMessages((previousMessages) => {
             const exists = previousMessages.some(
@@ -222,19 +222,12 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
               return previousMessages;
             }
 
-            /*
-             * If the server event arrives before the
-             * acknowledgement, replace the optimistic
-             * message using matching content.
-             */
             if (message.senderId === currentUserId) {
-              const optimisticIndex =
-                previousMessages.findIndex(
-                  (existingMessage) =>
-                    existingMessage.deliveryStatus === "pending" &&
-                    existingMessage.senderId === currentUserId &&
-                    existingMessage.content === message.content
-                );
+              const optimisticIndex = previousMessages.findIndex((existingMessage) =>
+                existingMessage.deliveryStatus === "pending" &&
+                existingMessage.senderId === currentUserId &&
+                existingMessage.content === message.content
+              );
 
               if (optimisticIndex !== -1) {
                 const next = [...previousMessages];
@@ -248,12 +241,11 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
               }
             }
 
-            return [
-              ...previousMessages,
-              {
-                ...message,
-                deliveryStatus: "sent",
-              },
+            return [...previousMessages,
+            {
+              ...message,
+              deliveryStatus: "sent",
+            },
             ];
           });
         };
@@ -264,15 +256,14 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           userId: string;
           readAt: string;
         }) => {
-          if (
-            data.conversationId !== conversationId
-          ) {
+          if (data.conversationId !== conversationId) {
             return;
           }
 
           setReadMessages((previous) => {
             const next = new Set(previous);
             next.add(data.messageId);
+            readMessagesRef.current = next;
             return next;
           });
         };
@@ -601,6 +592,14 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
         continue;
       }
 
+      if (message.deletedAt) {
+        continue;
+      }
+
+      if (readMessagesRef.current.has(message.id)) {
+        continue;
+      }
+
       markMessageAsRead(socket, message.id);
     }
   }, [messages, currentUserId, roomReady]);
@@ -609,10 +608,134 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
    * Auto-scroll
    */
   useEffect(() => {
+    if (!shouldScrollToBottomRef.current) {
+      return;
+    }
+
+    if (restoringOlderMessagesRef.current) {
+      return;
+    }
+
     messagesEndRef.current?.scrollIntoView({
       behavior: "smooth",
     });
+
+    shouldScrollToBottomRef.current = false;
   }, [messages]);
+
+
+  async function loadPreviousMessages() {
+    if (
+      loadingPrevious ||
+      !hasMoreMessages ||
+      messages.length === 0
+    ) {
+      return;
+    }
+
+    const container = messagesContainerRef.current;
+
+    const oldestMessage = messages[0];
+
+    if (!container || !oldestMessage) {
+      return;
+    }
+
+    const previousScrollHeight = container.scrollHeight;
+
+    const previousScrollTop = container.scrollTop;
+
+    setLoadingPrevious(true);
+
+    try {
+      const response = await fetch(
+        `/api/conversations/${conversationId}/messages?before=${encodeURIComponent(
+          oldestMessage.createdAt
+        )}`,
+        {
+          cache: "no-store",
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          "Failed to load previous messages"
+        );
+      }
+
+      const data = await response.json();
+
+      const olderMessages: Message[] = data.messages ?? [];
+
+      if (olderMessages.length === 0) {
+        setHasMoreMessages(false);
+        return;
+      }
+
+      const restoredReadMessages = new Set(readMessagesRef.current);
+
+      for (const message of olderMessages) {
+        if (message.senderId === currentUserId && message.readByOtherUser === true) {
+          restoredReadMessages.add(message.id);
+        }
+      }
+
+      readMessagesRef.current = restoredReadMessages;
+
+      setReadMessages(restoredReadMessages);
+
+      restoringOlderMessagesRef.current = true;
+
+      setMessages((previousMessages) => {
+        const existingIds = new Set(
+          previousMessages.map(
+            (message) => message.id
+          )
+        );
+
+        const uniqueOlderMessages =
+          olderMessages.filter(
+            (message) =>
+              !existingIds.has(message.id)
+          );
+
+        return [
+          ...uniqueOlderMessages,
+          ...previousMessages,
+        ];
+      });
+
+      setHasMoreMessages(
+        data.hasMore === true
+      );
+
+      /*
+       * Restore the user's visual position
+       * after the older messages are inserted.
+       */
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const currentContainer = messagesContainerRef.current;
+
+          if (!currentContainer) {
+            return;
+          }
+
+          const newScrollHeight = currentContainer.scrollHeight;
+
+          const heightDifference = newScrollHeight - previousScrollHeight;
+
+          currentContainer.scrollTop = previousScrollTop + heightDifference;
+
+          restoringOlderMessagesRef.current = false;
+        });
+      });
+    } catch (error) {
+      console.error("Failed to load previous messages:", error);
+    } finally {
+      setLoadingPrevious(false);
+    }
+  }
 
   /*
    * Send message
@@ -789,7 +912,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-5">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-5">
         {loading ? (
           <p className="text-sm text-slate-500">
             Loading messages...
@@ -799,143 +922,160 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
             No messages yet.
           </p>
         ) : (
-          <div className="space-y-3">
-            {messages.map(
-              (message) => {
-                const own =
-                  message.senderId ===
-                  currentUserId;
 
-                return (
-                  <div
-                    key={message.id}
-                    className={`flex ${own
-                      ? "justify-end"
-                      : "justify-start"
-                      }`}
-                  >
-                    <div
-                      className={`max-w-[75%] rounded-2xl px-4 py-3 ${own
-                        ? "bg-cyan-500 text-slate-950"
-                        : "bg-slate-800 text-white"
-                        }`}
-                    >
-                      {!own && (
-                        <p className="mb-1 text-xs font-medium opacity-60">
-                          {
-                            message.sender.username
-                          }
-                        </p>
-                      )}
-
-                      {own && !message.deletedAt && (
-                        <div className="mb-2 flex justify-end gap-1">
-                          <button
-                            onClick={() =>
-                              startEditingMessage(message)
-                            }
-                            className="rounded-md px-2 py-1 text-[10px] text-slate-700 hover:bg-black/10"
-                          >
-                            Edit
-                          </button>
-
-                          <button
-                            onClick={() =>
-                              requestDeleteMessage(message.id)
-                            }
-                            className="rounded-md px-2 py-1 text-[10px] text-red-700 hover:bg-black/10"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      )}
-
-                      {message.deletedAt ? (
-                        <p className="text-sm italic opacity-60">
-                          This message was deleted
-                        </p>
-                      ) : editingMessageId === message.id ? (
-                        <div className="min-w-[240px]">
-                          <textarea
-                            value={editingContent}
-                            onChange={(event) =>
-                              setEditingContent(
-                                event.target.value
-                              )
-                            }
-                            autoFocus
-                            className="w-full resize-none rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400"
-                            rows={3}
-                          />
-
-                          <div className="mt-2 flex justify-end gap-2">
-                            <button
-                              onClick={cancelEditingMessage}
-                              className="rounded-lg px-3 py-1.5 text-xs text-slate-400 hover:bg-white/10"
-                            >
-                              Cancel
-                            </button>
-
-                            <button
-                              onClick={saveEditedMessage}
-                              disabled={!editingContent.trim()}
-                              className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-50"
-                            >
-                              Save
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-end gap-2">
-                          <p className="wrap-break-word text-sm">
-                            {message.content}
-                          </p>
-
-                          {message.editedAt && (
-                            <span className="shrink-0 text-[10px] opacity-50">
-                              edited
-                            </span>
-                          )}
-
-                          {own && (
-                            <span
-                              className={`text-[11px] ${message.deliveryStatus === "failed"
-                                ? "text-red-700"
-                                : readMessages.has(message.id)
-                                  ? "text-blue-900"
-                                  : "text-slate-700"
-                                }`}
-                              title={
-                                message.deliveryStatus === "pending"
-                                  ? "Sending..."
-                                  : message.deliveryStatus === "failed"
-                                    ? "Failed to send"
-                                    : readMessages.has(message.id)
-                                      ? "Read"
-                                      : "Sent"
-                              }
-                            >
-                              {message.deliveryStatus === "pending"
-                                ? "◷"
-                                : message.deliveryStatus === "failed"
-                                  ? "!"
-                                  : readMessages.has(message.id)
-                                    ? "✓✓"
-                                    : "✓"}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              }
+          <>
+            {!loading && hasMoreMessages && (
+              <div className="mb-4 flex justify-center">
+                <button
+                  onClick={loadPreviousMessages}
+                  disabled={loadingPrevious}
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-slate-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {loadingPrevious
+                    ? "Loading previous messages..."
+                    : "See previous messages"}
+                </button>
+              </div>
             )}
 
-            <div
-              ref={messagesEndRef}
-            />
-          </div>
+            <div className="space-y-3">
+              {messages.map(
+                (message) => {
+                  const own =
+                    message.senderId ===
+                    currentUserId;
+
+                  return (
+                    <div
+                      key={message.id}
+                      className={`flex ${own
+                        ? "justify-end"
+                        : "justify-start"
+                        }`}
+                    >
+                      <div
+                        className={`max-w-[75%] rounded-2xl px-4 py-3 ${own
+                          ? "bg-cyan-500 text-slate-950"
+                          : "bg-slate-800 text-white"
+                          }`}
+                      >
+                        {!own && (
+                          <p className="mb-1 text-xs font-medium opacity-60">
+                            {
+                              message.sender.username
+                            }
+                          </p>
+                        )}
+
+                        {own && !message.deletedAt && (
+                          <div className="mb-2 flex justify-end gap-1">
+                            <button
+                              onClick={() =>
+                                startEditingMessage(message)
+                              }
+                              className="rounded-md px-2 py-1 text-[10px] text-slate-700 hover:bg-black/10"
+                            >
+                              Edit
+                            </button>
+
+                            <button
+                              onClick={() =>
+                                requestDeleteMessage(message.id)
+                              }
+                              className="rounded-md px-2 py-1 text-[10px] text-red-700 hover:bg-black/10"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+
+                        {message.deletedAt ? (
+                          <p className="text-sm italic opacity-60">
+                            This message was deleted
+                          </p>
+                        ) : editingMessageId === message.id ? (
+                          <div className="min-w-[240px]">
+                            <textarea
+                              value={editingContent}
+                              onChange={(event) =>
+                                setEditingContent(
+                                  event.target.value
+                                )
+                              }
+                              autoFocus
+                              className="w-full resize-none rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400"
+                              rows={3}
+                            />
+
+                            <div className="mt-2 flex justify-end gap-2">
+                              <button
+                                onClick={cancelEditingMessage}
+                                className="rounded-lg px-3 py-1.5 text-xs text-slate-400 hover:bg-white/10"
+                              >
+                                Cancel
+                              </button>
+
+                              <button
+                                onClick={saveEditedMessage}
+                                disabled={!editingContent.trim()}
+                                className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-50"
+                              >
+                                Save
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-end gap-2">
+                            <p className="wrap-break-word text-sm">
+                              {message.content}
+                            </p>
+
+                            {message.editedAt && (
+                              <span className="shrink-0 text-[10px] opacity-50">
+                                edited
+                              </span>
+                            )}
+
+                            {own && (
+                              <span
+                                className={`text-[11px] ${message.deliveryStatus === "failed"
+                                  ? "text-red-700"
+                                  : readMessages.has(message.id)
+                                    ? "text-blue-900"
+                                    : "text-slate-700"
+                                  }`}
+                                title={
+                                  message.deliveryStatus === "pending"
+                                    ? "Sending..."
+                                    : message.deliveryStatus === "failed"
+                                      ? "Failed to send"
+                                      : readMessages.has(message.id)
+                                        ? "Read"
+                                        : "Sent"
+                                }
+                              >
+                                {message.deliveryStatus === "pending"
+                                  ? "◷"
+                                  : message.deliveryStatus === "failed"
+                                    ? "!"
+                                    : readMessages.has(message.id)
+                                      ? "✓✓"
+                                      : "✓"}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+              )}
+
+              <div
+                ref={messagesEndRef}
+              />
+            </div>
+          </>
         )}
       </div>
 

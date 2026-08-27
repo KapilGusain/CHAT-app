@@ -1,50 +1,89 @@
-import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
-type Params = {
-  params: Promise<{
-    conversationId: string;
-  }>;
-};
+import { auth } from "@/auth";
+import { prisma } from "@chat/db";
+
+const PAGE_SIZE = 50;
 
 export async function GET(
-  _request: Request,
-  { params }: Params
+  request: Request,
+  {
+    params,
+  }: {
+    params: Promise<{
+      conversationId: string;
+    }>;
+  }
 ) {
   try {
     const session = await auth();
 
     if (!session?.user?.id) {
       return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
+        {
+          error: "Unauthorized",
+        },
+        {
+          status: 401,
+        }
       );
     }
 
     const { conversationId } = await params;
 
-    const member =
-      await prisma.conversationMember.findUnique({
-        where: {
-          conversationId_userId: {
-            conversationId,
-            userId: session.user.id,
-          },
+    if (!conversationId) {
+      return NextResponse.json(
+        {
+          error: "Conversation ID is required",
         },
-      });
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const member = await prisma.conversationMember.findUnique({
+      where: {
+        conversationId_userId: {
+          conversationId,
+          userId: session.user.id,
+        },
+      },
+    });
 
     if (!member) {
       return NextResponse.json(
-        { error: "Forbidden" },
-        { status: 403 }
+        {
+          error: "You are not a member of this conversation",
+        },
+        {
+          status: 403,
+        }
       );
     }
+
+    const { searchParams } = new URL(request.url);
+
+    const before = searchParams.get("before");
 
     const messages = await prisma.message.findMany({
       where: {
         conversationId,
+
+        ...(before
+          ? {
+              createdAt: {
+                lt: new Date(before),
+              },
+            }
+          : {}),
       },
+
+      orderBy: {
+        createdAt: "desc",
+      },
+
+      take: PAGE_SIZE + 1,
 
       include: {
         sender: {
@@ -69,40 +108,45 @@ export async function GET(
           },
         },
       },
-
-      orderBy: {
-        createdAt: "desc",
-      },
-
-      take: 50,
     });
-    messages.reverse();
 
-    const messagesWithReadState = messages.map(
-      (message) => ({
+    const hasMore = messages.length > PAGE_SIZE;
+
+    const pageMessages = messages
+      .slice(0, PAGE_SIZE)
+      .map((message) => ({
         id: message.id,
         conversationId: message.conversationId,
         senderId: message.senderId,
         content: message.content,
-        createdAt: message.createdAt,
-        updatedAt: message.updatedAt,
-        deletedAt: message.deletedAt,
-        editedAt: message.editedAt,
+
+        createdAt: message.createdAt.toISOString(),
+        updatedAt: message.updatedAt.toISOString(),
+
+        deletedAt: message.deletedAt
+          ? message.deletedAt.toISOString()
+          : null,
+
+        editedAt: message.editedAt
+          ? message.editedAt.toISOString()
+          : null,
 
         sender: message.sender,
 
-        readByCurrentUser:
-          message.senderId === session.user.id &&
-          message.reads.length > 0,
-      })
-    );
+        /*
+         * True means another participant has read this message.
+         */
+        readByOtherUser: message.reads.length > 0,
+      }))
+      .reverse();
 
     return NextResponse.json({
-      messages: messagesWithReadState,
+      messages: pageMessages,
+      hasMore,
     });
   } catch (error) {
     console.error(
-      "Get messages error:",
+      "GET messages error:",
       error
     );
 

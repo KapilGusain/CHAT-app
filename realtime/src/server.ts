@@ -12,7 +12,7 @@ import { verifyRealtimeToken, } from "./auth.js";
 
 import { prisma } from "@chat/db";
 
-import { isConversationMember, markConversationAsRead, getConversation, } from "./services/conversation.js";
+import { isConversationMember, markConversationAsRead } from "./services/conversation.js";
 import { markMessageAsRead, deleteMessage, editMessage } from "./services/message.js";
 
 dotenv.config({
@@ -96,8 +96,7 @@ io.use(async (socket, next) => {
       );
     }
 
-    const { userId } =
-      await verifyRealtimeToken(token);
+    const { userId } = await verifyRealtimeToken(token);
 
     const user = await prisma.user.findUnique({
       where: {
@@ -145,9 +144,8 @@ io.use(async (socket, next) => {
  * CONNECTION
  */
 
-const instanceId =
-  process.env.INSTANCE_ID ??
-  "unknown";
+const instanceId = process.env.INSTANCE_ID ?? "unknown";
+
 
 io.on("connection", async (socket) => {
 
@@ -165,6 +163,21 @@ io.on("connection", async (socket) => {
     }
   );
 
+  async function updateUserPresence(
+      userId: string,
+      status: "ONLINE" | "OFFLINE",
+      lastSeenAt: Date | null
+    ) {
+      await prisma.user.update({
+        where: {
+          id: userId,
+        },
+        data: {
+          status,
+          lastSeenAt,
+        },
+      });
+    }
 
   /*
    * SEND MESSAGE
@@ -533,6 +546,8 @@ io.on("connection", async (socket) => {
           });
         }
 
+        await markConversationAsRead(result.conversationId, userId);
+
         io.to(`user:${result.senderId}`).emit(
           "message:read",
           {
@@ -793,9 +808,7 @@ io.on("connection", async (socket) => {
    */
 
   socket.on("conversation:leave",
-    async (
-      conversationId: string
-    ) => {
+    async (conversationId: string) => {
       if (!conversationId) {
         return;
       }
@@ -807,43 +820,74 @@ io.on("connection", async (socket) => {
   );
 
   /*
-   * DISCONNECT 
+   * DISCONNECT
    */
+  socket.on("disconnect", async (reason) => {
+    console.log(
+      `🟠 User ${userId} disconnected`,
+      {
+        socketId: socket.id,
+        reason,
+        instanceId,
+      }
+    );
 
-  socket.on("disconnect",
-    async (reason) => {
-      console.log(
-        `🟠 User ${userId} disconnected`,
-        {
-          socketId: socket.id,
-          reason,
-          instanceId,
-        }
+    try {
+      const presence = await removeConnection(
+        userId,
+        socket.id
       );
 
-      const stillOnline =
-        await removeConnection(
+      /*
+       * Do not mark the user offline if they still
+       * have another active socket/tab/device.
+       */
+      if (!presence.online) {
+        const lastSeenAt = new Date();
+
+        await updateUserPresence(
           userId,
-          socket.id
+          "OFFLINE",
+          lastSeenAt
         );
 
-      if (!stillOnline) {
-        io.emit("presence:update",
-          {
-            userId,
-            status: "OFFLINE",
-          }
+        io.emit("presence:update", {
+          userId,
+          status: "OFFLINE",
+          lastSeenAt: lastSeenAt.toISOString(),
+        });
+      }
+    } catch (error) {
+      console.error(
+        "Failed to remove realtime connection:",
+        error
+      );
+    }
+  });
+
+  /*
+   * CONNECTION PRESENCE
+   */
+  void addConnection(userId, socket.id)
+    .then(async () => {
+      try {
+        await updateUserPresence(
+          userId,
+          "ONLINE",
+          null
+        );
+
+        io.emit("presence:update", {
+          userId,
+          status: "ONLINE",
+          lastSeenAt: null,
+        });
+      } catch (error) {
+        console.error(
+          "Failed to update online presence:",
+          error
         );
       }
-    }
-  );
-
-  void addConnection(userId, socket.id)
-    .then(() => {
-      io.emit("presence:update", {
-        userId,
-        status: "ONLINE",
-      });
     })
     .catch((error) => {
       console.error(
@@ -851,12 +895,12 @@ io.on("connection", async (socket) => {
         error
       );
     });
+
 }
 );
 
 
-const PORT =
-  Number(process.env.PORT) || 4000;
+const PORT = Number(process.env.PORT) || 4000;
 
 async function startServer() {
   try {

@@ -22,8 +22,7 @@ export async function POST(
       );
     }
 
-    const { conversationId } =
-      await params;
+    const { conversationId } = await params;
 
     if (!conversationId) {
       return NextResponse.json(
