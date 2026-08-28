@@ -9,17 +9,27 @@ interface Message {
   id: string;
   conversationId: string;
   senderId: string;
-  content: string;
+
+  content: string | null;
+
   createdAt: string;
   updatedAt?: string;
   deletedAt?: string | null;
   editedAt?: string | null;
+
+  imageUrl?: string | null;
+  imageName?: string | null;
+  imageSize?: number | null;
+  imageMimeType?: string | null;
+
   sender: {
     id: string;
     username: string;
     avatarUrl: string | null;
   };
+
   readByOtherUser?: boolean;
+
   deliveryStatus?: "pending" | "sent" | "failed";
 }
 
@@ -38,6 +48,7 @@ interface SocketResponse {
 export default function ChatWindow({ conversationId, currentUserId, chatUserName }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [content, setContent] = useState("");
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [loadingPrevious, setLoadingPrevious] = useState(false);
@@ -55,6 +66,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const shouldScrollToBottomRef = useRef(true);
   const restoringOlderMessagesRef = useRef(false);
 
@@ -229,14 +241,49 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
             }
 
             if (message.senderId === currentUserId) {
-              const optimisticIndex = previousMessages.findIndex((existingMessage) =>
-                existingMessage.deliveryStatus === "pending" &&
-                existingMessage.senderId === currentUserId &&
-                existingMessage.content === message.content
-              );
+              const optimisticIndex =
+                previousMessages.findIndex(
+                  (existingMessage) => {
+                    if (
+                      existingMessage.deliveryStatus !==
+                      "pending"
+                    ) {
+                      return false;
+                    }
+
+                    if (
+                      existingMessage.senderId !==
+                      currentUserId
+                    ) {
+                      return false;
+                    }
+
+                    /*
+                     * Image reconciliation
+                     */
+                    if (message.imageUrl) {
+                      return (
+                        existingMessage.imageUrl ===
+                        message.imageUrl
+                      );
+                    }
+
+                    /*
+                     * Text reconciliation
+                     */
+                    return (
+                      !existingMessage.imageUrl &&
+                      !message.imageUrl &&
+                      existingMessage.content ===
+                      message.content
+                    );
+                  }
+                );
 
               if (optimisticIndex !== -1) {
-                const next = [...previousMessages];
+                const next = [
+                  ...previousMessages,
+                ];
 
                 next[optimisticIndex] = {
                   ...message,
@@ -246,13 +293,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
                 return next;
               }
             }
-
-            return [...previousMessages,
-            {
-              ...message,
-              deliveryStatus: "sent",
-            },
-            ];
+            return [...previousMessages, { ...message, deliveryStatus: "sent" }];
           });
         };
 
@@ -534,10 +575,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
   function startEditingMessage(
     message: Message
   ) {
-    if (
-      message.senderId !== currentUserId ||
-      message.deletedAt
-    ) {
+    if (message.senderId !== currentUserId || message.deletedAt || !message.content) {
       return;
     }
 
@@ -553,15 +591,9 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
   function saveEditedMessage() {
     const socket = socketRef.current;
 
-    const trimmed =
-      editingContent.trim();
+    const trimmed = editingContent.trim();
 
-    if (
-      !socket ||
-      !socket.connected ||
-      !editingMessageId ||
-      !trimmed
-    ) {
+    if (!socket || !socket.connected || !editingMessageId || !trimmed) {
       return;
     }
 
@@ -584,6 +616,31 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
         setEditingContent("");
       }
     );
+  }
+
+  function getMessageStatus(message: Message) {
+    if (
+      message.deliveryStatus ===
+      "pending"
+    ) {
+      return "◷";
+    }
+
+    if (
+      message.deliveryStatus ===
+      "failed"
+    ) {
+      return "!";
+    }
+
+    if (
+      readMessages.has(message.id) ||
+      message.readByOtherUser === true
+    ) {
+      return "✓✓";
+    }
+
+    return "✓";
   }
 
   useEffect(() => {
@@ -757,15 +814,12 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
         return false;
       }
 
-      return message.content
-        .toLowerCase()
-        .includes(trimmed);
+      return message.content?.toLowerCase().includes(trimmed) ?? false;
     });
 
     setSearchResults(results);
     setSearchPerformed(true);
   }
-
 
   function openSearchResult(message: Message) {
     setSearchOpen(false);
@@ -776,6 +830,247 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
         block: "center",
       });
     });
+  }
+
+  async function handleImageSelected(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      console.error(
+        "Only JPG, PNG, WEBP and GIF images are allowed"
+      );
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      console.error(
+        "Image must be smaller than 10 MB"
+      );
+      return;
+    }
+
+    if (!roomReady) {
+      console.error(
+        "Cannot send image: conversation room is not ready"
+      );
+      return;
+    }
+
+    try {
+      setUploadingImage(true);
+
+      console.log("🖼️ Selected image:", {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+      });
+
+      /*
+       * Upload image to Next.js API.
+       */
+      const formData = new FormData();
+
+      formData.append(
+        "file",
+        file
+      );
+
+      formData.append(
+        "conversationId",
+        conversationId
+      );
+
+      const uploadResponse =
+        await fetch(
+          "/api/messages/image",
+          {
+            method: "POST",
+            body: formData,
+            cache: "no-store",
+          }
+        );
+
+      const uploadData =
+        await uploadResponse.json();
+
+      if (
+        !uploadResponse.ok ||
+        !uploadData.success
+      ) {
+        throw new Error(
+          uploadData.error ||
+          "Failed to upload image"
+        );
+      }
+
+      console.log(
+        "✅ Image uploaded successfully"
+      );
+
+      const socket =
+        socketRef.current;
+
+      if (
+        !socket ||
+        !socket.connected
+      ) {
+        throw new Error(
+          "Socket is not connected"
+        );
+      }
+
+      /*
+       * Create optimistic ID.
+       */
+      const optimisticId =
+        `optimistic-image-${conversationId}-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2)}`;
+
+      /*
+       * Show image immediately.
+       */
+      const optimisticMessage: Message = {
+        id: optimisticId,
+
+        conversationId,
+
+        senderId:
+          currentUserId,
+
+        content: null,
+
+        imageUrl:
+          uploadData.imageUrl,
+
+        imageName:
+          uploadData.imageName,
+
+        imageSize:
+          uploadData.imageSize,
+
+        imageMimeType:
+          uploadData.imageMimeType,
+
+        createdAt:
+          new Date().toISOString(),
+
+        updatedAt:
+          new Date().toISOString(),
+
+        deletedAt: null,
+
+        editedAt: null,
+
+        sender: {
+          id: currentUserId,
+          username: "You",
+          avatarUrl: null,
+        },
+
+        deliveryStatus: "pending",
+      };
+
+      setMessages(
+        (previousMessages) => [
+          ...previousMessages,
+          optimisticMessage,
+        ]
+      );
+
+      /*
+       * Send the persisted image metadata
+       * through Socket.IO.
+       */
+      socket.emit(
+        "send_message",
+        {
+          conversationId,
+
+          content: null,
+
+          imageUrl:
+            uploadData.imageUrl,
+
+          imageName:
+            uploadData.imageName,
+
+          imageSize:
+            uploadData.imageSize,
+
+          imageMimeType:
+            uploadData.imageMimeType,
+        },
+        (
+          response: SocketResponse
+        ) => {
+          if (
+            !response.success ||
+            !response.message
+          ) {
+            console.error(
+              "❌ Failed to send image message:",
+              response.error
+            );
+
+            setMessages(
+              (previousMessages) =>
+                previousMessages.map(
+                  (message) =>
+                    message.id === optimisticId
+                      ? {
+                        ...message,
+                        deliveryStatus:
+                          "failed",
+                      }
+                      : message
+                )
+            );
+
+            return;
+          }
+
+          /*
+           * Replace optimistic message
+           * with the actual DB message.
+           */
+          setMessages(
+            (previousMessages) =>
+              previousMessages.map(
+                (message) =>
+                  message.id === optimisticId
+                    ? {
+                      ...response.message!,
+                      deliveryStatus:
+                        "sent",
+                    }
+                    : message
+              )
+          );
+        }
+      );
+
+    } catch (error) {
+      console.error(
+        "❌ Failed to upload/send image:",
+        error
+      );
+    } finally {
+      setUploadingImage(false);
+    }
   }
 
   /*
@@ -1073,9 +1368,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
                         </p>
 
                         <p className="mt-1 line-clamp-2 text-sm text-slate-300">
-                          {message.deletedAt
-                            ? "This message was deleted"
-                            : message.content}
+                          {message.deletedAt ? "This message was deleted" : message.content}
                         </p>
                       </button>
                     ))}
@@ -1201,43 +1494,71 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
                           </div>
                         ) : (
                           <div className="flex items-end gap-2">
-                            <p className="wrap-break-word text-sm">
-                              {message.content}
-                            </p>
+                            {message.imageUrl ? (
+                              <div className="space-y-2">
+                                <img
+                                  src={message.imageUrl}
+                                  alt={message.imageName ?? "Image"}
+                                  className="max-h-96 max-w-full rounded-xl object-contain"
+                                  loading="lazy"
+                                />
 
-                            {message.editedAt && (
-                              <span className="shrink-0 text-[10px] opacity-50">
-                                edited
-                              </span>
-                            )}
+                                <div className="flex items-end gap-2">
+                                  {message.imageName && (
+                                    <p className="max-w-48 truncate text-xs opacity-60">
+                                      {message.imageName}
+                                    </p>
+                                  )}
 
-                            {own && (
-                              <span
-                                className={`text-[11px] ${message.deliveryStatus === "failed"
-                                  ? "text-red-700"
-                                  : readMessages.has(message.id)
-                                    ? "text-blue-900"
-                                    : "text-slate-700"
-                                  }`}
-                                title={
-                                  message.deliveryStatus === "pending"
-                                    ? "Sending..."
-                                    : message.deliveryStatus === "failed"
-                                      ? "Failed to send"
+                                  {own && (
+                                    <span
+                                      className={`text-[11px] ${message.deliveryStatus === "failed"
+                                          ? "text-red-700"
+                                          : readMessages.has(message.id) ||
+                                            message.readByOtherUser === true
+                                            ? "text-blue-900"
+                                            : "text-slate-700"
+                                        }`}
+                                    >
+                                      {getMessageStatus(message)}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-end gap-2">
+                                <p className="wrap-break-word text-sm">
+                                  {message.content}
+                                </p>
+
+                                {message.editedAt && (
+                                  <span className="shrink-0 text-[10px] opacity-50">
+                                    edited
+                                  </span>
+                                )}
+
+                                {own && (
+                                  <span
+                                    className={`text-[11px] ${message.deliveryStatus === "failed"
+                                      ? "text-red-700"
                                       : readMessages.has(message.id)
-                                        ? "Read"
-                                        : "Sent"
-                                }
-                              >
-                                {message.deliveryStatus === "pending"
-                                  ? "◷"
-                                  : message.deliveryStatus === "failed"
-                                    ? "!"
-                                    : readMessages.has(message.id)
+                                        ? "text-blue-900"
+                                        : "text-slate-700"
+                                      }`}
+                                    title={
+                                      message.deliveryStatus === "pending" ? "Sending..." : message.deliveryStatus === "failed"
+                                        ? "Failed to send"
+                                        : readMessages.has(message.id) ? "Read" : "Sent"
+                                    }
+                                  >
+                                    {message.deliveryStatus === "pending" ? "◷" : message.deliveryStatus === "failed" ? "!" : readMessages.has(message.id)
                                       ? "✓✓"
                                       : "✓"}
-                              </span>
+                                  </span>
+                                )}
+                              </div>
                             )}
+
                           </div>
                         )}
                       </div>
@@ -1257,15 +1578,35 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
       {/* Input */}
       <div className="border-t border-white/10 p-4">
         <div className="flex gap-3">
+          {/* Image picker */}
+          <button
+            type="button"
+            onClick={() => imageInputRef.current?.click()}
+            disabled={!roomReady || uploadingImage}
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            title="Send image"
+          >
+            🖼️
+          </button>
+
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleImageSelected}
+          />
+
           <input
             value={content}
             onChange={(event) =>
-              setContent(
-                event.target.value
-              )
+              setContent(event.target.value)
             }
             onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
+              if (
+                event.key === "Enter" &&
+                !event.shiftKey
+              ) {
                 event.preventDefault();
                 sendMessage();
               }
@@ -1285,7 +1626,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
               !content.trim() ||
               !roomReady
             }
-            className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400  disabled:opacity-50"
+            className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-50"
           >
             Send
           </button>

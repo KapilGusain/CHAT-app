@@ -67,12 +67,17 @@ model Message {
   conversationId String
   senderId       String
 
-  content String
+  content String?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   editedAt  DateTime?
   deletedAt DateTime?
+
+  imageUrl      String?
+  imageName     String?
+  imageSize     Int?
+  imageMimeType String?
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)

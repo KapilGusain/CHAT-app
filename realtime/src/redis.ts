@@ -19,8 +19,7 @@ export const pubClient = createClient({
   url: valkeyUrl,
 });
 
-export const subClient =
-  pubClient.duplicate();
+export const subClient = pubClient.duplicate();
 
 /*
  * Valkey connection errors

@@ -158,7 +158,11 @@ exports.Prisma.MessageScalarFieldEnum = {
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
   editedAt: 'editedAt',
-  deletedAt: 'deletedAt'
+  deletedAt: 'deletedAt',
+  imageUrl: 'imageUrl',
+  imageName: 'imageName',
+  imageSize: 'imageSize',
+  imageMimeType: 'imageMimeType'
 };
 
 exports.Prisma.MessageReadScalarFieldEnum = {

@@ -8,10 +8,7 @@ type Params = {
   }>;
 };
 
-export async function POST(
-  _request: Request,
-  { params }: Params
-) {
+export async function POST( _request: Request, { params }: Params) {
   try {
     const session = await auth();
 
@@ -27,15 +24,13 @@ export async function POST(
     if (!conversationId) {
       return NextResponse.json(
         {
-          error:
-            "Conversation ID is required",
+          error: "Conversation ID is required",
         },
         { status: 400 }
       );
     }
 
-    const member =
-      await prisma.conversationMember.findUnique({
+    const member = await prisma.conversationMember.findUnique({
         where: {
           conversationId_userId: {
             conversationId,
@@ -51,8 +46,7 @@ export async function POST(
       );
     }
 
-    const lastMessage =
-      await prisma.message.findFirst({
+    const lastMessage = await prisma.message.findFirst({
         where: {
           conversationId,
         },

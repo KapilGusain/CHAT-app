@@ -72,10 +72,10 @@ export async function GET(
 
         ...(before
           ? {
-              createdAt: {
-                lt: new Date(before),
-              },
-            }
+            createdAt: {
+              lt: new Date(before),
+            },
+          }
           : {}),
       },
 
@@ -120,22 +120,18 @@ export async function GET(
         senderId: message.senderId,
         content: message.content,
 
+        imageUrl: message.imageUrl,
+        imageName: message.imageName,
+        imageSize: message.imageSize,
+        imageMimeType: message.imageMimeType,
+
         createdAt: message.createdAt.toISOString(),
         updatedAt: message.updatedAt.toISOString(),
 
-        deletedAt: message.deletedAt
-          ? message.deletedAt.toISOString()
-          : null,
-
-        editedAt: message.editedAt
-          ? message.editedAt.toISOString()
-          : null,
+        deletedAt: message.deletedAt ? message.deletedAt.toISOString() : null,
+        editedAt: message.editedAt ? message.editedAt.toISOString() : null,
 
         sender: message.sender,
-
-        /*
-         * True means another participant has read this message.
-         */
         readByOtherUser: message.reads.length > 0,
       }))
       .reverse();

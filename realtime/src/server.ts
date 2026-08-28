@@ -164,30 +164,34 @@ io.on("connection", async (socket) => {
   );
 
   async function updateUserPresence(
-      userId: string,
-      status: "ONLINE" | "OFFLINE",
-      lastSeenAt: Date | null
-    ) {
-      await prisma.user.update({
-        where: {
-          id: userId,
-        },
-        data: {
-          status,
-          lastSeenAt,
-        },
-      });
-    }
+    userId: string,
+    status: "ONLINE" | "OFFLINE",
+    lastSeenAt: Date | null
+  ) {
+    await prisma.user.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        status,
+        lastSeenAt,
+      },
+    });
+  }
 
   /*
    * SEND MESSAGE
    */
 
-  socket.on("send_message",
-    async (
+  socket.on("send_message",async (
       payload: {
         conversationId?: string;
-        content?: string;
+        content?: string | null;
+
+        imageUrl?: string | null;
+        imageName?: string | null;
+        imageSize?: number | null;
+        imageMimeType?: string | null;
       },
       callback?: (
         response: {
@@ -197,7 +201,14 @@ io.on("connection", async (socket) => {
             id: string;
             conversationId: string;
             senderId: string;
-            content: string;
+
+            content: string | null;
+
+            imageUrl: string | null;
+            imageName: string | null;
+            imageSize: number | null;
+            imageMimeType: string | null;
+
             createdAt: string;
             updatedAt: string;
             deletedAt: Date | null;
@@ -216,34 +227,125 @@ io.on("connection", async (socket) => {
           socket.data.userId as string;
 
         const conversationId =
-          typeof payload?.conversationId === "string" ? payload.conversationId.trim() : "";
+          typeof payload?.conversationId === "string"
+            ? payload.conversationId.trim()
+            : "";
 
-        const content = typeof payload?.content === "string" ? payload.content.trim() : "";
+        const content =
+          typeof payload?.content === "string"
+            ? payload.content.trim()
+            : null;
 
+        const imageUrl =
+          typeof payload?.imageUrl === "string"
+            ? payload.imageUrl.trim()
+            : null;
+
+        const imageName =
+          typeof payload?.imageName === "string"
+            ? payload.imageName
+            : null;
+
+        const imageSize =
+          typeof payload?.imageSize === "number"
+            ? payload.imageSize
+            : null;
+
+        const imageMimeType =
+          typeof payload?.imageMimeType === "string"
+            ? payload.imageMimeType
+            : null;
+
+        /*
+         * Conversation validation
+         */
         if (!conversationId) {
           return callback?.({
             success: false,
-            error:
-              "Conversation ID is required",
+            error: "Conversation ID is required",
           });
         }
 
-        if (!content) {
+        /*
+         * Determine message type.
+         */
+        const hasText = Boolean(content);
+        const hasImage = Boolean(imageUrl);
+
+        /*
+         * A message must contain something.
+         */
+        if (!hasText && !hasImage) {
           return callback?.({
             success: false,
-            error:
-              "Message cannot be empty",
+            error: "Message cannot be empty",
           });
         }
 
-        if (content.length > 5000) {
+        /*
+         * Currently we support either text OR image.
+         * Captions can be added later.
+         */
+        if (hasText && hasImage) {
           return callback?.({
             success: false,
-            error:
-              "Message is too long",
+            error: "Message cannot contain both text and image",
           });
         }
 
+        /*
+         * Text validation
+         */
+        if (hasText && content && content.length > 5000) {
+          return callback?.({
+            success: false,
+            error: "Message is too long",
+          });
+        }
+
+        /*
+         * Image validation
+         */
+        if (hasImage) {
+          const allowedImageTypes = [
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/gif",
+          ];
+
+          if (
+            !imageMimeType ||
+            !allowedImageTypes.includes(imageMimeType)
+          ) {
+            return callback?.({
+              success: false,
+              error: "Invalid image type",
+            });
+          }
+
+          if (
+            typeof imageSize !== "number" ||
+            imageSize <= 0 ||
+            imageSize > 10 * 1024 * 1024
+          ) {
+            return callback?.({
+              success: false,
+              error: "Invalid image size",
+            });
+          }
+
+          if (!imageName) {
+            return callback?.({
+              success: false,
+              error: "Image name is required",
+            });
+          }
+        }
+
+        /*
+         * Verify conversation membership.
+         */
         const member = await isConversationMember(
           conversationId,
           userId
@@ -257,45 +359,64 @@ io.on("connection", async (socket) => {
           });
         }
 
-        const message = await prisma.message.create({
-          data: {
-            conversationId,
-            senderId: userId,
-            content,
-          },
+        /*
+         * Persist the message.
+         */
+        const message =
+          await prisma.message.create({
+            data: {
+              conversationId,
+              senderId: userId,
 
-          include: {
-            sender: {
-              select: {
-                id: true,
-                username: true,
-                avatarUrl: true,
+              content,
+
+              imageUrl,
+              imageName,
+              imageSize,
+              imageMimeType,
+            },
+
+            include: {
+              sender: {
+                select: {
+                  id: true,
+                  username: true,
+                  avatarUrl: true,
+                },
               },
             },
-          },
-        });
+          });
 
+        /*
+         * Update conversation timestamp.
+         */
         await prisma.conversation.update({
           where: {
             id: conversationId,
           },
+
           data: {
             updatedAt: new Date(),
           },
         });
 
-        const conversation = await prisma.conversation.findUnique({
-          where: {
-            id: conversationId,
-          },
-          select: {
-            members: {
-              select: {
-                userId: true,
+        /*
+         * Get conversation members.
+         */
+        const conversation =
+          await prisma.conversation.findUnique({
+            where: {
+              id: conversationId,
+            },
+
+            select: {
+              members: {
+                select: {
+                  userId: true,
+                },
               },
             },
-          },
-        });
+          });
 
         if (!conversation) {
           return callback?.({
@@ -304,29 +425,64 @@ io.on("connection", async (socket) => {
           });
         }
 
+        /*
+         * Create the exact payload sent to clients.
+         */
         const messagePayload = {
           id: message.id,
-          conversationId: message.conversationId,
-          senderId: message.senderId,
-          content: message.content,
-          createdAt: message.createdAt.toISOString(),
-          updatedAt: message.updatedAt.toISOString(),
-          deletedAt: message.deletedAt,
-          editedAt: message.editedAt,
-          sender: message.sender,
+
+          conversationId:
+            message.conversationId,
+
+          senderId:
+            message.senderId,
+
+          content:
+            message.content,
+
+          imageUrl:
+            message.imageUrl,
+
+          imageName:
+            message.imageName,
+
+          imageSize:
+            message.imageSize,
+
+          imageMimeType:
+            message.imageMimeType,
+
+          createdAt:
+            message.createdAt.toISOString(),
+
+          updatedAt:
+            message.updatedAt.toISOString(),
+
+          deletedAt:
+            message.deletedAt,
+
+          editedAt:
+            message.editedAt,
+
+          sender:
+            message.sender,
         };
 
-        const room = `conversation:${conversationId}`;
+        const room =
+          `conversation:${conversationId}`;
 
         /*
-         * Broadcast the persisted message to everyone
-         * currently inside the conversation room.
+         * Broadcast to everyone currently inside
+         * the conversation.
          */
-        io.to(room).emit("message:new", messagePayload);
+        io.to(room).emit(
+          "message:new",
+          messagePayload
+        );
 
         /*
-         * Notify members who are not currently receiving
-         * the conversation room message.
+         * Notify conversation members through
+         * their user rooms.
          */
         for (const member of conversation.members) {
           if (member.userId === userId) {
@@ -343,11 +499,7 @@ io.on("connection", async (socket) => {
         }
 
         /*
-         * Delivery acknowledgement.
-         *
-         * The sender now receives the actual persisted
-         * database message so the client can replace its
-         * optimistic message.
+         * Acknowledge persistence to sender.
          */
         callback?.({
           success: true,

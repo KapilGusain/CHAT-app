@@ -4870,8 +4870,18 @@ export namespace Prisma {
 
   export type AggregateMessage = {
     _count: MessageCountAggregateOutputType | null
+    _avg: MessageAvgAggregateOutputType | null
+    _sum: MessageSumAggregateOutputType | null
     _min: MessageMinAggregateOutputType | null
     _max: MessageMaxAggregateOutputType | null
+  }
+
+  export type MessageAvgAggregateOutputType = {
+    imageSize: number | null
+  }
+
+  export type MessageSumAggregateOutputType = {
+    imageSize: number | null
   }
 
   export type MessageMinAggregateOutputType = {
@@ -4883,6 +4893,10 @@ export namespace Prisma {
     updatedAt: Date | null
     editedAt: Date | null
     deletedAt: Date | null
+    imageUrl: string | null
+    imageName: string | null
+    imageSize: number | null
+    imageMimeType: string | null
   }
 
   export type MessageMaxAggregateOutputType = {
@@ -4894,6 +4908,10 @@ export namespace Prisma {
     updatedAt: Date | null
     editedAt: Date | null
     deletedAt: Date | null
+    imageUrl: string | null
+    imageName: string | null
+    imageSize: number | null
+    imageMimeType: string | null
   }
 
   export type MessageCountAggregateOutputType = {
@@ -4905,9 +4923,21 @@ export namespace Prisma {
     updatedAt: number
     editedAt: number
     deletedAt: number
+    imageUrl: number
+    imageName: number
+    imageSize: number
+    imageMimeType: number
     _all: number
   }
 
+
+  export type MessageAvgAggregateInputType = {
+    imageSize?: true
+  }
+
+  export type MessageSumAggregateInputType = {
+    imageSize?: true
+  }
 
   export type MessageMinAggregateInputType = {
     id?: true
@@ -4918,6 +4948,10 @@ export namespace Prisma {
     updatedAt?: true
     editedAt?: true
     deletedAt?: true
+    imageUrl?: true
+    imageName?: true
+    imageSize?: true
+    imageMimeType?: true
   }
 
   export type MessageMaxAggregateInputType = {
@@ -4929,6 +4963,10 @@ export namespace Prisma {
     updatedAt?: true
     editedAt?: true
     deletedAt?: true
+    imageUrl?: true
+    imageName?: true
+    imageSize?: true
+    imageMimeType?: true
   }
 
   export type MessageCountAggregateInputType = {
@@ -4940,6 +4978,10 @@ export namespace Prisma {
     updatedAt?: true
     editedAt?: true
     deletedAt?: true
+    imageUrl?: true
+    imageName?: true
+    imageSize?: true
+    imageMimeType?: true
     _all?: true
   }
 
@@ -4981,6 +5023,18 @@ export namespace Prisma {
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
+     * Select which fields to average
+    **/
+    _avg?: MessageAvgAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to sum
+    **/
+    _sum?: MessageSumAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
      * Select which fields to find the minimum value
     **/
     _min?: MessageMinAggregateInputType
@@ -5011,6 +5065,8 @@ export namespace Prisma {
     take?: number
     skip?: number
     _count?: MessageCountAggregateInputType | true
+    _avg?: MessageAvgAggregateInputType
+    _sum?: MessageSumAggregateInputType
     _min?: MessageMinAggregateInputType
     _max?: MessageMaxAggregateInputType
   }
@@ -5019,12 +5075,18 @@ export namespace Prisma {
     id: string
     conversationId: string
     senderId: string
-    content: string
+    content: string | null
     createdAt: Date
     updatedAt: Date
     editedAt: Date | null
     deletedAt: Date | null
+    imageUrl: string | null
+    imageName: string | null
+    imageSize: number | null
+    imageMimeType: string | null
     _count: MessageCountAggregateOutputType | null
+    _avg: MessageAvgAggregateOutputType | null
+    _sum: MessageSumAggregateOutputType | null
     _min: MessageMinAggregateOutputType | null
     _max: MessageMaxAggregateOutputType | null
   }
@@ -5052,6 +5114,10 @@ export namespace Prisma {
     updatedAt?: boolean
     editedAt?: boolean
     deletedAt?: boolean
+    imageUrl?: boolean
+    imageName?: boolean
+    imageSize?: boolean
+    imageMimeType?: boolean
     conversation?: boolean | ConversationDefaultArgs<ExtArgs>
     sender?: boolean | UserDefaultArgs<ExtArgs>
     reads?: boolean | Message$readsArgs<ExtArgs>
@@ -5067,6 +5133,10 @@ export namespace Prisma {
     updatedAt?: boolean
     editedAt?: boolean
     deletedAt?: boolean
+    imageUrl?: boolean
+    imageName?: boolean
+    imageSize?: boolean
+    imageMimeType?: boolean
     conversation?: boolean | ConversationDefaultArgs<ExtArgs>
     sender?: boolean | UserDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["message"]>
@@ -5080,6 +5150,10 @@ export namespace Prisma {
     updatedAt?: boolean
     editedAt?: boolean
     deletedAt?: boolean
+    imageUrl?: boolean
+    imageName?: boolean
+    imageSize?: boolean
+    imageMimeType?: boolean
     conversation?: boolean | ConversationDefaultArgs<ExtArgs>
     sender?: boolean | UserDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["message"]>
@@ -5093,9 +5167,13 @@ export namespace Prisma {
     updatedAt?: boolean
     editedAt?: boolean
     deletedAt?: boolean
+    imageUrl?: boolean
+    imageName?: boolean
+    imageSize?: boolean
+    imageMimeType?: boolean
   }
 
-  export type MessageOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "conversationId" | "senderId" | "content" | "createdAt" | "updatedAt" | "editedAt" | "deletedAt", ExtArgs["result"]["message"]>
+  export type MessageOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "conversationId" | "senderId" | "content" | "createdAt" | "updatedAt" | "editedAt" | "deletedAt" | "imageUrl" | "imageName" | "imageSize" | "imageMimeType", ExtArgs["result"]["message"]>
   export type MessageInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     conversation?: boolean | ConversationDefaultArgs<ExtArgs>
     sender?: boolean | UserDefaultArgs<ExtArgs>
@@ -5122,11 +5200,15 @@ export namespace Prisma {
       id: string
       conversationId: string
       senderId: string
-      content: string
+      content: string | null
       createdAt: Date
       updatedAt: Date
       editedAt: Date | null
       deletedAt: Date | null
+      imageUrl: string | null
+      imageName: string | null
+      imageSize: number | null
+      imageMimeType: string | null
     }, ExtArgs["result"]["message"]>
     composites: {}
   }
@@ -5561,6 +5643,10 @@ export namespace Prisma {
     readonly updatedAt: FieldRef<"Message", 'DateTime'>
     readonly editedAt: FieldRef<"Message", 'DateTime'>
     readonly deletedAt: FieldRef<"Message", 'DateTime'>
+    readonly imageUrl: FieldRef<"Message", 'String'>
+    readonly imageName: FieldRef<"Message", 'String'>
+    readonly imageSize: FieldRef<"Message", 'Int'>
+    readonly imageMimeType: FieldRef<"Message", 'String'>
   }
     
 
@@ -7123,7 +7209,11 @@ export namespace Prisma {
     createdAt: 'createdAt',
     updatedAt: 'updatedAt',
     editedAt: 'editedAt',
-    deletedAt: 'deletedAt'
+    deletedAt: 'deletedAt',
+    imageUrl: 'imageUrl',
+    imageName: 'imageName',
+    imageSize: 'imageSize',
+    imageMimeType: 'imageMimeType'
   };
 
   export type MessageScalarFieldEnum = (typeof MessageScalarFieldEnum)[keyof typeof MessageScalarFieldEnum]
@@ -7235,6 +7325,20 @@ export namespace Prisma {
    * Reference to a field of type 'Int[]'
    */
   export type ListIntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Int[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'Float'
+   */
+  export type FloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float'>
+    
+
+
+  /**
+   * Reference to a field of type 'Float[]'
+   */
+  export type ListFloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float[]'>
     
   /**
    * Deep Input Types
@@ -7462,11 +7566,15 @@ export namespace Prisma {
     id?: StringFilter<"Message"> | string
     conversationId?: StringFilter<"Message"> | string
     senderId?: StringFilter<"Message"> | string
-    content?: StringFilter<"Message"> | string
+    content?: StringNullableFilter<"Message"> | string | null
     createdAt?: DateTimeFilter<"Message"> | Date | string
     updatedAt?: DateTimeFilter<"Message"> | Date | string
     editedAt?: DateTimeNullableFilter<"Message"> | Date | string | null
     deletedAt?: DateTimeNullableFilter<"Message"> | Date | string | null
+    imageUrl?: StringNullableFilter<"Message"> | string | null
+    imageName?: StringNullableFilter<"Message"> | string | null
+    imageSize?: IntNullableFilter<"Message"> | number | null
+    imageMimeType?: StringNullableFilter<"Message"> | string | null
     conversation?: XOR<ConversationScalarRelationFilter, ConversationWhereInput>
     sender?: XOR<UserScalarRelationFilter, UserWhereInput>
     reads?: MessageReadListRelationFilter
@@ -7476,11 +7584,15 @@ export namespace Prisma {
     id?: SortOrder
     conversationId?: SortOrder
     senderId?: SortOrder
-    content?: SortOrder
+    content?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     editedAt?: SortOrderInput | SortOrder
     deletedAt?: SortOrderInput | SortOrder
+    imageUrl?: SortOrderInput | SortOrder
+    imageName?: SortOrderInput | SortOrder
+    imageSize?: SortOrderInput | SortOrder
+    imageMimeType?: SortOrderInput | SortOrder
     conversation?: ConversationOrderByWithRelationInput
     sender?: UserOrderByWithRelationInput
     reads?: MessageReadOrderByRelationAggregateInput
@@ -7493,11 +7605,15 @@ export namespace Prisma {
     NOT?: MessageWhereInput | MessageWhereInput[]
     conversationId?: StringFilter<"Message"> | string
     senderId?: StringFilter<"Message"> | string
-    content?: StringFilter<"Message"> | string
+    content?: StringNullableFilter<"Message"> | string | null
     createdAt?: DateTimeFilter<"Message"> | Date | string
     updatedAt?: DateTimeFilter<"Message"> | Date | string
     editedAt?: DateTimeNullableFilter<"Message"> | Date | string | null
     deletedAt?: DateTimeNullableFilter<"Message"> | Date | string | null
+    imageUrl?: StringNullableFilter<"Message"> | string | null
+    imageName?: StringNullableFilter<"Message"> | string | null
+    imageSize?: IntNullableFilter<"Message"> | number | null
+    imageMimeType?: StringNullableFilter<"Message"> | string | null
     conversation?: XOR<ConversationScalarRelationFilter, ConversationWhereInput>
     sender?: XOR<UserScalarRelationFilter, UserWhereInput>
     reads?: MessageReadListRelationFilter
@@ -7507,14 +7623,20 @@ export namespace Prisma {
     id?: SortOrder
     conversationId?: SortOrder
     senderId?: SortOrder
-    content?: SortOrder
+    content?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     editedAt?: SortOrderInput | SortOrder
     deletedAt?: SortOrderInput | SortOrder
+    imageUrl?: SortOrderInput | SortOrder
+    imageName?: SortOrderInput | SortOrder
+    imageSize?: SortOrderInput | SortOrder
+    imageMimeType?: SortOrderInput | SortOrder
     _count?: MessageCountOrderByAggregateInput
+    _avg?: MessageAvgOrderByAggregateInput
     _max?: MessageMaxOrderByAggregateInput
     _min?: MessageMinOrderByAggregateInput
+    _sum?: MessageSumOrderByAggregateInput
   }
 
   export type MessageScalarWhereWithAggregatesInput = {
@@ -7524,11 +7646,15 @@ export namespace Prisma {
     id?: StringWithAggregatesFilter<"Message"> | string
     conversationId?: StringWithAggregatesFilter<"Message"> | string
     senderId?: StringWithAggregatesFilter<"Message"> | string
-    content?: StringWithAggregatesFilter<"Message"> | string
+    content?: StringNullableWithAggregatesFilter<"Message"> | string | null
     createdAt?: DateTimeWithAggregatesFilter<"Message"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"Message"> | Date | string
     editedAt?: DateTimeNullableWithAggregatesFilter<"Message"> | Date | string | null
     deletedAt?: DateTimeNullableWithAggregatesFilter<"Message"> | Date | string | null
+    imageUrl?: StringNullableWithAggregatesFilter<"Message"> | string | null
+    imageName?: StringNullableWithAggregatesFilter<"Message"> | string | null
+    imageSize?: IntNullableWithAggregatesFilter<"Message"> | number | null
+    imageMimeType?: StringNullableWithAggregatesFilter<"Message"> | string | null
   }
 
   export type MessageReadWhereInput = {
@@ -7818,11 +7944,15 @@ export namespace Prisma {
 
   export type MessageCreateInput = {
     id?: string
-    content: string
+    content?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     editedAt?: Date | string | null
     deletedAt?: Date | string | null
+    imageUrl?: string | null
+    imageName?: string | null
+    imageSize?: number | null
+    imageMimeType?: string | null
     conversation: ConversationCreateNestedOneWithoutMessagesInput
     sender: UserCreateNestedOneWithoutMessagesInput
     reads?: MessageReadCreateNestedManyWithoutMessageInput
@@ -7832,21 +7962,29 @@ export namespace Prisma {
     id?: string
     conversationId: string
     senderId: string
-    content: string
+    content?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     editedAt?: Date | string | null
     deletedAt?: Date | string | null
+    imageUrl?: string | null
+    imageName?: string | null
+    imageSize?: number | null
+    imageMimeType?: string | null
     reads?: MessageReadUncheckedCreateNestedManyWithoutMessageInput
   }
 
   export type MessageUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
+    content?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     editedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    imageName?: NullableStringFieldUpdateOperationsInput | string | null
+    imageSize?: NullableIntFieldUpdateOperationsInput | number | null
+    imageMimeType?: NullableStringFieldUpdateOperationsInput | string | null
     conversation?: ConversationUpdateOneRequiredWithoutMessagesNestedInput
     sender?: UserUpdateOneRequiredWithoutMessagesNestedInput
     reads?: MessageReadUpdateManyWithoutMessageNestedInput
@@ -7856,11 +7994,15 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     conversationId?: StringFieldUpdateOperationsInput | string
     senderId?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
+    content?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     editedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    imageName?: NullableStringFieldUpdateOperationsInput | string | null
+    imageSize?: NullableIntFieldUpdateOperationsInput | number | null
+    imageMimeType?: NullableStringFieldUpdateOperationsInput | string | null
     reads?: MessageReadUncheckedUpdateManyWithoutMessageNestedInput
   }
 
@@ -7868,31 +8010,43 @@ export namespace Prisma {
     id?: string
     conversationId: string
     senderId: string
-    content: string
+    content?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     editedAt?: Date | string | null
     deletedAt?: Date | string | null
+    imageUrl?: string | null
+    imageName?: string | null
+    imageSize?: number | null
+    imageMimeType?: string | null
   }
 
   export type MessageUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
+    content?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     editedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    imageName?: NullableStringFieldUpdateOperationsInput | string | null
+    imageSize?: NullableIntFieldUpdateOperationsInput | number | null
+    imageMimeType?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type MessageUncheckedUpdateManyInput = {
     id?: StringFieldUpdateOperationsInput | string
     conversationId?: StringFieldUpdateOperationsInput | string
     senderId?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
+    content?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     editedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    imageName?: NullableStringFieldUpdateOperationsInput | string | null
+    imageSize?: NullableIntFieldUpdateOperationsInput | number | null
+    imageMimeType?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type MessageReadCreateInput = {
@@ -8247,6 +8401,17 @@ export namespace Prisma {
     lastReadAt?: SortOrder
   }
 
+  export type IntNullableFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel> | null
+    in?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    lt?: number | IntFieldRefInput<$PrismaModel>
+    lte?: number | IntFieldRefInput<$PrismaModel>
+    gt?: number | IntFieldRefInput<$PrismaModel>
+    gte?: number | IntFieldRefInput<$PrismaModel>
+    not?: NestedIntNullableFilter<$PrismaModel> | number | null
+  }
+
   export type MessageCountOrderByAggregateInput = {
     id?: SortOrder
     conversationId?: SortOrder
@@ -8256,6 +8421,14 @@ export namespace Prisma {
     updatedAt?: SortOrder
     editedAt?: SortOrder
     deletedAt?: SortOrder
+    imageUrl?: SortOrder
+    imageName?: SortOrder
+    imageSize?: SortOrder
+    imageMimeType?: SortOrder
+  }
+
+  export type MessageAvgOrderByAggregateInput = {
+    imageSize?: SortOrder
   }
 
   export type MessageMaxOrderByAggregateInput = {
@@ -8267,6 +8440,10 @@ export namespace Prisma {
     updatedAt?: SortOrder
     editedAt?: SortOrder
     deletedAt?: SortOrder
+    imageUrl?: SortOrder
+    imageName?: SortOrder
+    imageSize?: SortOrder
+    imageMimeType?: SortOrder
   }
 
   export type MessageMinOrderByAggregateInput = {
@@ -8278,6 +8455,30 @@ export namespace Prisma {
     updatedAt?: SortOrder
     editedAt?: SortOrder
     deletedAt?: SortOrder
+    imageUrl?: SortOrder
+    imageName?: SortOrder
+    imageSize?: SortOrder
+    imageMimeType?: SortOrder
+  }
+
+  export type MessageSumOrderByAggregateInput = {
+    imageSize?: SortOrder
+  }
+
+  export type IntNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel> | null
+    in?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    lt?: number | IntFieldRefInput<$PrismaModel>
+    lte?: number | IntFieldRefInput<$PrismaModel>
+    gt?: number | IntFieldRefInput<$PrismaModel>
+    gte?: number | IntFieldRefInput<$PrismaModel>
+    not?: NestedIntNullableWithAggregatesFilter<$PrismaModel> | number | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _avg?: NestedFloatNullableFilter<$PrismaModel>
+    _sum?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedIntNullableFilter<$PrismaModel>
+    _max?: NestedIntNullableFilter<$PrismaModel>
   }
 
   export type MessageScalarRelationFilter = {
@@ -8657,6 +8858,14 @@ export namespace Prisma {
     connect?: MessageReadWhereUniqueInput | MessageReadWhereUniqueInput[]
   }
 
+  export type NullableIntFieldUpdateOperationsInput = {
+    set?: number | null
+    increment?: number
+    decrement?: number
+    multiply?: number
+    divide?: number
+  }
+
   export type ConversationUpdateOneRequiredWithoutMessagesNestedInput = {
     create?: XOR<ConversationCreateWithoutMessagesInput, ConversationUncheckedCreateWithoutMessagesInput>
     connectOrCreate?: ConversationCreateOrConnectWithoutMessagesInput
@@ -8897,6 +9106,33 @@ export namespace Prisma {
     _max?: NestedEnumConversationTypeFilter<$PrismaModel>
   }
 
+  export type NestedIntNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel> | null
+    in?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    lt?: number | IntFieldRefInput<$PrismaModel>
+    lte?: number | IntFieldRefInput<$PrismaModel>
+    gt?: number | IntFieldRefInput<$PrismaModel>
+    gte?: number | IntFieldRefInput<$PrismaModel>
+    not?: NestedIntNullableWithAggregatesFilter<$PrismaModel> | number | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _avg?: NestedFloatNullableFilter<$PrismaModel>
+    _sum?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedIntNullableFilter<$PrismaModel>
+    _max?: NestedIntNullableFilter<$PrismaModel>
+  }
+
+  export type NestedFloatNullableFilter<$PrismaModel = never> = {
+    equals?: number | FloatFieldRefInput<$PrismaModel> | null
+    in?: number[] | ListFloatFieldRefInput<$PrismaModel> | null
+    notIn?: number[] | ListFloatFieldRefInput<$PrismaModel> | null
+    lt?: number | FloatFieldRefInput<$PrismaModel>
+    lte?: number | FloatFieldRefInput<$PrismaModel>
+    gt?: number | FloatFieldRefInput<$PrismaModel>
+    gte?: number | FloatFieldRefInput<$PrismaModel>
+    not?: NestedFloatNullableFilter<$PrismaModel> | number | null
+  }
+
   export type ConversationMemberCreateWithoutUserInput = {
     id?: string
     joinedAt?: Date | string
@@ -8923,11 +9159,15 @@ export namespace Prisma {
 
   export type MessageCreateWithoutSenderInput = {
     id?: string
-    content: string
+    content?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     editedAt?: Date | string | null
     deletedAt?: Date | string | null
+    imageUrl?: string | null
+    imageName?: string | null
+    imageSize?: number | null
+    imageMimeType?: string | null
     conversation: ConversationCreateNestedOneWithoutMessagesInput
     reads?: MessageReadCreateNestedManyWithoutMessageInput
   }
@@ -8935,11 +9175,15 @@ export namespace Prisma {
   export type MessageUncheckedCreateWithoutSenderInput = {
     id?: string
     conversationId: string
-    content: string
+    content?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     editedAt?: Date | string | null
     deletedAt?: Date | string | null
+    imageUrl?: string | null
+    imageName?: string | null
+    imageSize?: number | null
+    imageMimeType?: string | null
     reads?: MessageReadUncheckedCreateNestedManyWithoutMessageInput
   }
 
@@ -9057,11 +9301,15 @@ export namespace Prisma {
     id?: StringFilter<"Message"> | string
     conversationId?: StringFilter<"Message"> | string
     senderId?: StringFilter<"Message"> | string
-    content?: StringFilter<"Message"> | string
+    content?: StringNullableFilter<"Message"> | string | null
     createdAt?: DateTimeFilter<"Message"> | Date | string
     updatedAt?: DateTimeFilter<"Message"> | Date | string
     editedAt?: DateTimeNullableFilter<"Message"> | Date | string | null
     deletedAt?: DateTimeNullableFilter<"Message"> | Date | string | null
+    imageUrl?: StringNullableFilter<"Message"> | string | null
+    imageName?: StringNullableFilter<"Message"> | string | null
+    imageSize?: IntNullableFilter<"Message"> | number | null
+    imageMimeType?: StringNullableFilter<"Message"> | string | null
   }
 
   export type MessageReadUpsertWithWhereUniqueWithoutUserInput = {
@@ -9180,11 +9428,15 @@ export namespace Prisma {
 
   export type MessageCreateWithoutConversationInput = {
     id?: string
-    content: string
+    content?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     editedAt?: Date | string | null
     deletedAt?: Date | string | null
+    imageUrl?: string | null
+    imageName?: string | null
+    imageSize?: number | null
+    imageMimeType?: string | null
     sender: UserCreateNestedOneWithoutMessagesInput
     reads?: MessageReadCreateNestedManyWithoutMessageInput
   }
@@ -9192,11 +9444,15 @@ export namespace Prisma {
   export type MessageUncheckedCreateWithoutConversationInput = {
     id?: string
     senderId: string
-    content: string
+    content?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     editedAt?: Date | string | null
     deletedAt?: Date | string | null
+    imageUrl?: string | null
+    imageName?: string | null
+    imageSize?: number | null
+    imageMimeType?: string | null
     reads?: MessageReadUncheckedCreateNestedManyWithoutMessageInput
   }
 
@@ -9595,11 +9851,15 @@ export namespace Prisma {
 
   export type MessageCreateWithoutReadsInput = {
     id?: string
-    content: string
+    content?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     editedAt?: Date | string | null
     deletedAt?: Date | string | null
+    imageUrl?: string | null
+    imageName?: string | null
+    imageSize?: number | null
+    imageMimeType?: string | null
     conversation: ConversationCreateNestedOneWithoutMessagesInput
     sender: UserCreateNestedOneWithoutMessagesInput
   }
@@ -9608,11 +9868,15 @@ export namespace Prisma {
     id?: string
     conversationId: string
     senderId: string
-    content: string
+    content?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     editedAt?: Date | string | null
     deletedAt?: Date | string | null
+    imageUrl?: string | null
+    imageName?: string | null
+    imageSize?: number | null
+    imageMimeType?: string | null
   }
 
   export type MessageCreateOrConnectWithoutReadsInput = {
@@ -9668,11 +9932,15 @@ export namespace Prisma {
 
   export type MessageUpdateWithoutReadsInput = {
     id?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
+    content?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     editedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    imageName?: NullableStringFieldUpdateOperationsInput | string | null
+    imageSize?: NullableIntFieldUpdateOperationsInput | number | null
+    imageMimeType?: NullableStringFieldUpdateOperationsInput | string | null
     conversation?: ConversationUpdateOneRequiredWithoutMessagesNestedInput
     sender?: UserUpdateOneRequiredWithoutMessagesNestedInput
   }
@@ -9681,11 +9949,15 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     conversationId?: StringFieldUpdateOperationsInput | string
     senderId?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
+    content?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     editedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    imageName?: NullableStringFieldUpdateOperationsInput | string | null
+    imageSize?: NullableIntFieldUpdateOperationsInput | number | null
+    imageMimeType?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type UserUpsertWithoutMessageReadsInput = {
@@ -9739,11 +10011,15 @@ export namespace Prisma {
   export type MessageCreateManySenderInput = {
     id?: string
     conversationId: string
-    content: string
+    content?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     editedAt?: Date | string | null
     deletedAt?: Date | string | null
+    imageUrl?: string | null
+    imageName?: string | null
+    imageSize?: number | null
+    imageMimeType?: string | null
   }
 
   export type MessageReadCreateManyUserInput = {
@@ -9784,11 +10060,15 @@ export namespace Prisma {
 
   export type MessageUpdateWithoutSenderInput = {
     id?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
+    content?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     editedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    imageName?: NullableStringFieldUpdateOperationsInput | string | null
+    imageSize?: NullableIntFieldUpdateOperationsInput | number | null
+    imageMimeType?: NullableStringFieldUpdateOperationsInput | string | null
     conversation?: ConversationUpdateOneRequiredWithoutMessagesNestedInput
     reads?: MessageReadUpdateManyWithoutMessageNestedInput
   }
@@ -9796,22 +10076,30 @@ export namespace Prisma {
   export type MessageUncheckedUpdateWithoutSenderInput = {
     id?: StringFieldUpdateOperationsInput | string
     conversationId?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
+    content?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     editedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    imageName?: NullableStringFieldUpdateOperationsInput | string | null
+    imageSize?: NullableIntFieldUpdateOperationsInput | number | null
+    imageMimeType?: NullableStringFieldUpdateOperationsInput | string | null
     reads?: MessageReadUncheckedUpdateManyWithoutMessageNestedInput
   }
 
   export type MessageUncheckedUpdateManyWithoutSenderInput = {
     id?: StringFieldUpdateOperationsInput | string
     conversationId?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
+    content?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     editedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    imageName?: NullableStringFieldUpdateOperationsInput | string | null
+    imageSize?: NullableIntFieldUpdateOperationsInput | number | null
+    imageMimeType?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type MessageReadUpdateWithoutUserInput = {
@@ -9873,11 +10161,15 @@ export namespace Prisma {
   export type MessageCreateManyConversationInput = {
     id?: string
     senderId: string
-    content: string
+    content?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     editedAt?: Date | string | null
     deletedAt?: Date | string | null
+    imageUrl?: string | null
+    imageName?: string | null
+    imageSize?: number | null
+    imageMimeType?: string | null
   }
 
   export type ConversationMemberUpdateWithoutConversationInput = {
@@ -9903,11 +10195,15 @@ export namespace Prisma {
 
   export type MessageUpdateWithoutConversationInput = {
     id?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
+    content?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     editedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    imageName?: NullableStringFieldUpdateOperationsInput | string | null
+    imageSize?: NullableIntFieldUpdateOperationsInput | number | null
+    imageMimeType?: NullableStringFieldUpdateOperationsInput | string | null
     sender?: UserUpdateOneRequiredWithoutMessagesNestedInput
     reads?: MessageReadUpdateManyWithoutMessageNestedInput
   }
@@ -9915,22 +10211,30 @@ export namespace Prisma {
   export type MessageUncheckedUpdateWithoutConversationInput = {
     id?: StringFieldUpdateOperationsInput | string
     senderId?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
+    content?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     editedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    imageName?: NullableStringFieldUpdateOperationsInput | string | null
+    imageSize?: NullableIntFieldUpdateOperationsInput | number | null
+    imageMimeType?: NullableStringFieldUpdateOperationsInput | string | null
     reads?: MessageReadUncheckedUpdateManyWithoutMessageNestedInput
   }
 
   export type MessageUncheckedUpdateManyWithoutConversationInput = {
     id?: StringFieldUpdateOperationsInput | string
     senderId?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
+    content?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     editedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    imageName?: NullableStringFieldUpdateOperationsInput | string | null
+    imageSize?: NullableIntFieldUpdateOperationsInput | number | null
+    imageMimeType?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type MessageReadCreateManyMessageInput = {
