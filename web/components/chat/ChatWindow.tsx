@@ -152,17 +152,18 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
   }, [conversationId, currentUserId]);
 
   /*
-   * Socket lifecycle
-   */
+ * Socket lifecycle
+ */
   useEffect(() => {
     let mounted = true;
     let currentSocket: Socket | null = null;
     let joined = false;
 
+    let cleanupSocket: (() => void) | null = null;
+
     async function setupSocket() {
       try {
-        const socket =
-          await getSocket();
+        const socket = await getSocket();
 
         if (!mounted) {
           return;
@@ -171,16 +172,15 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
         currentSocket = socket;
         socketRef.current = socket;
 
-        /*
-         * Join the current conversation.
-         */
         const joinConversation = () => {
           if (!mounted) {
             return;
           }
 
           if (!socket.connected) {
-            console.log("⚠️ Cannot join conversation: socket is not connected");
+            console.log(
+              "⚠️ Cannot join conversation: socket is not connected"
+            );
 
             setSocketReady(false);
             setRoomReady(false);
@@ -192,42 +192,45 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
             return;
           }
 
-          socket.emit("conversation:join", conversationId, (response: SocketResponse) => {
-            if (!mounted) {
-              return;
+          socket.emit("conversation:join",
+            conversationId,
+            (response: SocketResponse) => {
+              if (!mounted) {
+                return;
+              }
+
+              if (!response.success) {
+                joined = false;
+
+                roomReadyRef.current = false;
+                setRoomReady(false);
+
+                console.error(
+                  "❌ Failed to join conversation:",
+                  response.error
+                );
+
+                return;
+              }
+
+              joined = true;
+
+              roomReadyRef.current = true;
+              setRoomReady(true);
+
+              markConversationAsRead(socket);
             }
-
-            if (!response.success) {
-              joined = false;
-
-              setRoomReady(false);
-
-              console.error(
-                " Failed to join conversation:",
-                response.error
-              );
-
-              return;
-            }
-
-            joined = true;
-
-            roomReadyRef.current = true;
-            setRoomReady(true);
-
-            markConversationAsRead(socket);
-
-          }
           );
         };
 
-        /*
-         * New realtime message
-         */
         const handleNewMessage = (message: Message) => {
-          if (message.conversationId !== conversationId) {
+          if (
+            !mounted ||
+            message.conversationId !== conversationId
+          ) {
             return;
           }
+
           shouldScrollToBottomRef.current = true;
 
           setMessages((previousMessages) => {
@@ -258,9 +261,6 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
                       return false;
                     }
 
-                    /*
-                     * Image reconciliation
-                     */
                     if (message.imageUrl) {
                       return (
                         existingMessage.imageUrl ===
@@ -268,9 +268,6 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
                       );
                     }
 
-                    /*
-                     * Text reconciliation
-                     */
                     return (
                       !existingMessage.imageUrl &&
                       !message.imageUrl &&
@@ -293,7 +290,14 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
                 return next;
               }
             }
-            return [...previousMessages, { ...message, deliveryStatus: "sent" }];
+
+            return [
+              ...previousMessages,
+              {
+                ...message,
+                deliveryStatus: "sent",
+              },
+            ];
           });
         };
 
@@ -303,14 +307,20 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           userId: string;
           readAt: string;
         }) => {
-          if (data.conversationId !== conversationId) {
+          if (
+            !mounted ||
+            data.conversationId !== conversationId
+          ) {
             return;
           }
 
           setReadMessages((previous) => {
             const next = new Set(previous);
+
             next.add(data.messageId);
+
             readMessagesRef.current = next;
+
             return next;
           });
         };
@@ -321,6 +331,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           deletedAt: string;
         }) => {
           if (
+            !mounted ||
             data.conversationId !== conversationId
           ) {
             return;
@@ -350,6 +361,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           editedAt: string | null;
         }) => {
           if (
+            !mounted ||
             data.conversationId !== conversationId
           ) {
             return;
@@ -370,10 +382,11 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           );
         };
 
-        /*
-         * Socket connected
-         */
         const handleConnect = () => {
+          if (!mounted) {
+            return;
+          }
+
           console.log(
             "🟢 ChatWindow socket connected:",
             socket.id
@@ -382,18 +395,20 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           setSocketReady(true);
 
           joined = false;
+
           roomReadyRef.current = false;
           setRoomReady(false);
 
           joinConversation();
         };
 
-        /*
-         * Socket disconnected
-         */
         const handleDisconnect = (
           reason: string
         ) => {
+          if (!mounted) {
+            return;
+          }
+
           console.log(
             "🟠 ChatWindow socket disconnected:",
             reason
@@ -402,96 +417,193 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           joined = false;
 
           setSocketReady(false);
+
           roomReadyRef.current = false;
           setRoomReady(false);
         };
 
-        /*
-         * Connection errors
-         */
         const handleConnectError = (
           error: Error
         ) => {
+          if (!mounted) {
+            return;
+          }
+
           console.error(
             "🔴 ChatWindow socket connection error:",
             error.message
           );
 
           setSocketReady(false);
+
           roomReadyRef.current = false;
           setRoomReady(false);
         };
 
-        socket.on("message:new", handleNewMessage);
+        /*
+         * Register listeners.
+         */
+        socket.on(
+          "message:new",
+          handleNewMessage
+        );
 
-        socket.on("connect", handleConnect);
+        socket.on(
+          "connect",
+          handleConnect
+        );
 
-        socket.on("message:read", handleMessageRead);
+        socket.on(
+          "message:read",
+          handleMessageRead
+        );
 
-        socket.on("message:edited", handleMessageEdited);
+        socket.on(
+          "message:edited",
+          handleMessageEdited
+        );
 
-        socket.on("message:deleted", handleMessageDeleted);
+        socket.on(
+          "message:deleted",
+          handleMessageDeleted
+        );
 
-        socket.on("disconnect", handleDisconnect);
+        socket.on(
+          "disconnect",
+          handleDisconnect
+        );
 
-        socket.on("connect_error", handleConnectError);
+        socket.on(
+          "connect_error",
+          handleConnectError
+        );
 
+        /*
+         * Define cleanup immediately after
+         * registering the listeners.
+         */
+        cleanupSocket = () => {
+          if (joined) {
+            socket.emit("conversation:leave",
+              conversationId
+            );
+          }
+
+          socket.off(
+            "message:new",
+            handleNewMessage
+          );
+
+          socket.off(
+            "connect",
+            handleConnect
+          );
+
+          socket.off(
+            "message:read",
+            handleMessageRead
+          );
+
+          socket.off(
+            "message:edited",
+            handleMessageEdited
+          );
+
+          socket.off(
+            "message:deleted",
+            handleMessageDeleted
+          );
+
+          socket.off(
+            "disconnect",
+            handleDisconnect
+          );
+
+          socket.off(
+            "connect_error",
+            handleConnectError
+          );
+
+          joined = false;
+
+          if (
+            socketRef.current === socket
+          ) {
+            socketRef.current = null;
+          }
+
+          roomReadyRef.current = false;
+        };
+
+        /*
+         * If cleanup happened while getSocket()
+         * was resolving, don't connect/join.
+         */
+        if (!mounted) {
+          cleanupSocket();
+          cleanupSocket = null;
+          return;
+        }
+
+        /*
+         * Socket is already connected.
+         */
         if (socket.connected) {
-          console.log("🟢 Socket already connected:", socket.id);
+          console.log(
+            "🟢 Socket already connected:",
+            socket.id
+          );
 
           setSocketReady(true);
 
           joinConversation();
         } else {
-          console.log("🟡 Socket not connected yet. Waiting for connect...");
+          console.log(
+            "🟡 Socket not connected yet. Waiting for connect..."
+          );
 
           setSocketReady(false);
           setRoomReady(false);
 
           socket.connect();
         }
-
-        /*
-         * Cleanup when conversation changes
-         * or component unmounts.
-         */
-        return () => {
-          mounted = false;
-
-          if (currentSocket) {
-
-            currentSocket.emit("conversation:leave", conversationId);
-
-            currentSocket.off("message:new", handleNewMessage);
-
-            currentSocket.off("connect", handleConnect);
-            currentSocket.off("message:read", handleMessageRead);
-            currentSocket.off("message:deleted", handleMessageDeleted);
-            currentSocket.off("message:edited", handleMessageEdited);
-
-            currentSocket.off("disconnect", handleDisconnect);
-            currentSocket.off("connect_error", handleConnectError);
-          }
-
-          socketRef.current = null;
-        };
       } catch (error) {
         console.error(
-          "❌ Failed to initialize chat socket:",
+          " Failed to initialize chat socket:",
           error
         );
 
         if (mounted) {
           setSocketReady(false);
+
+          roomReadyRef.current = false;
           setRoomReady(false);
         }
       }
     }
 
-    setupSocket();
+    void setupSocket();
 
+    /*
+     *  React cleanup.
+     */
     return () => {
       mounted = false;
+
+      cleanupSocket?.();
+      cleanupSocket = null;
+
+      currentSocket = null;
+      joined = false;
+
+      roomReadyRef.current = false;
+
+      if (socketRef.current) {
+        socketRef.current = null;
+      }
+
+      setRoomReady(false);
+      setSocketReady(false);
     };
   }, [conversationId]);
 
@@ -1513,11 +1625,11 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
                                   {own && (
                                     <span
                                       className={`text-[11px] ${message.deliveryStatus === "failed"
-                                          ? "text-red-700"
-                                          : readMessages.has(message.id) ||
-                                            message.readByOtherUser === true
-                                            ? "text-blue-900"
-                                            : "text-slate-700"
+                                        ? "text-red-700"
+                                        : readMessages.has(message.id) ||
+                                          message.readByOtherUser === true
+                                          ? "text-blue-900"
+                                          : "text-slate-700"
                                         }`}
                                     >
                                       {getMessageStatus(message)}
