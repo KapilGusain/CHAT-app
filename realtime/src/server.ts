@@ -7,7 +7,7 @@ import { Server } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 
 import { connectValkey, pubClient, subClient } from "./redis.js";
-import { addConnection, removeConnection } from "./presence.js";
+// import { addConnection, removeConnection } from "./presence.js";
 import { verifyRealtimeToken, } from "./auth.js";
 
 import { prisma } from "@chat/db";
@@ -179,345 +179,424 @@ io.on("connection", async (socket) => {
     });
   }
 
+  async function syncUserPresence(userId: string) {
+    try {
+      const sockets = await io.in(`user:${userId}`).fetchSockets();
+
+      const isOnline = sockets.length > 0;
+
+      const lastSeenAt = isOnline ? null : new Date();
+
+      await updateUserPresence(
+        userId,
+        isOnline ? "ONLINE" : "OFFLINE",
+        lastSeenAt
+      );
+
+      io.emit("presence:update", {
+        userId,
+        status: isOnline ? "ONLINE" : "OFFLINE",
+        lastSeenAt: lastSeenAt
+          ? lastSeenAt.toISOString()
+          : null,
+      });
+
+      console.log(
+        "📡 Presence synchronized:",
+        {
+          userId,
+          status: isOnline ? "ONLINE" : "OFFLINE",
+          activeSockets: sockets.length,
+        }
+      );
+    } catch (error) {
+      console.error(
+        "Failed to synchronize user presence:",
+        error
+      );
+    }
+  }
+
   /*
    * SEND MESSAGE
    */
 
-  socket.on("send_message",async (
-      payload: {
-        conversationId?: string;
-        content?: string | null;
+  socket.on("send_message", async (
+    payload: {
+      conversationId?: string;
+      content?: string | null;
 
-        imageUrl?: string | null;
-        imageName?: string | null;
-        imageSize?: number | null;
-        imageMimeType?: string | null;
-      },
-      callback?: (
-        response: {
-          success: boolean;
-          error?: string;
-          message?: {
+      imageUrl?: string | null;
+      imageName?: string | null;
+      imageSize?: number | null;
+      imageMimeType?: string | null;
+    },
+    callback?: (
+      response: {
+        success: boolean;
+        error?: string;
+        message?: {
+          id: string;
+          conversationId: string;
+          senderId: string;
+
+          content: string | null;
+
+          imageUrl: string | null;
+          imageName: string | null;
+          imageSize: number | null;
+          imageMimeType: string | null;
+
+          createdAt: string;
+          updatedAt: string;
+          deletedAt: Date | null;
+          editedAt: Date | null;
+          sender: {
             id: string;
-            conversationId: string;
-            senderId: string;
-
-            content: string | null;
-
-            imageUrl: string | null;
-            imageName: string | null;
-            imageSize: number | null;
-            imageMimeType: string | null;
-
-            createdAt: string;
-            updatedAt: string;
-            deletedAt: Date | null;
-            editedAt: Date | null;
-            sender: {
-              id: string;
-              username: string;
-              avatarUrl: string | null;
-            };
+            username: string;
+            avatarUrl: string | null;
           };
-        }
-      ) => void
-    ) => {
-      try {
-        const userId =
-          socket.data.userId as string;
+        };
+      }
+    ) => void
+  ) => {
+    try {
+      const userId =
+        socket.data.userId as string;
 
-        const conversationId =
-          typeof payload?.conversationId === "string"
-            ? payload.conversationId.trim()
-            : "";
+      const conversationId =
+        typeof payload?.conversationId === "string"
+          ? payload.conversationId.trim()
+          : "";
 
-        const content =
-          typeof payload?.content === "string"
-            ? payload.content.trim()
-            : null;
+      const content =
+        typeof payload?.content === "string"
+          ? payload.content.trim()
+          : null;
 
-        const imageUrl =
-          typeof payload?.imageUrl === "string"
-            ? payload.imageUrl.trim()
-            : null;
+      const imageUrl =
+        typeof payload?.imageUrl === "string"
+          ? payload.imageUrl.trim()
+          : null;
 
-        const imageName =
-          typeof payload?.imageName === "string"
-            ? payload.imageName
-            : null;
+      const imageName =
+        typeof payload?.imageName === "string"
+          ? payload.imageName
+          : null;
 
-        const imageSize =
-          typeof payload?.imageSize === "number"
-            ? payload.imageSize
-            : null;
+      const imageSize =
+        typeof payload?.imageSize === "number"
+          ? payload.imageSize
+          : null;
 
-        const imageMimeType =
-          typeof payload?.imageMimeType === "string"
-            ? payload.imageMimeType
-            : null;
+      const imageMimeType =
+        typeof payload?.imageMimeType === "string"
+          ? payload.imageMimeType
+          : null;
 
-        /*
-         * Conversation validation
-         */
-        if (!conversationId) {
+      /*
+       * Conversation validation
+       */
+      if (!conversationId) {
+        return callback?.({
+          success: false,
+          error: "Conversation ID is required",
+        });
+      }
+
+      /*
+       * Determine message type.
+       */
+      const hasText = Boolean(content);
+      const hasImage = Boolean(imageUrl);
+
+      /*
+       * A message must contain something.
+       */
+      if (!hasText && !hasImage) {
+        return callback?.({
+          success: false,
+          error: "Message cannot be empty",
+        });
+      }
+
+      /*
+       * Currently we support either text OR image.
+       * Captions can be added later.
+       */
+      if (hasText && hasImage) {
+        return callback?.({
+          success: false,
+          error: "Message cannot contain both text and image",
+        });
+      }
+
+      /*
+       * Text validation
+       */
+      if (hasText && content && content.length > 5000) {
+        return callback?.({
+          success: false,
+          error: "Message is too long",
+        });
+      }
+
+      /*
+       * Image validation
+       */
+      if (hasImage) {
+        const allowedImageTypes = [
+          "image/jpeg",
+          "image/png",
+          "image/webp",
+          "image/gif",
+        ];
+
+        if (
+          !imageMimeType ||
+          !allowedImageTypes.includes(imageMimeType)
+        ) {
           return callback?.({
             success: false,
-            error: "Conversation ID is required",
+            error: "Invalid image type",
           });
         }
 
-        /*
-         * Determine message type.
-         */
-        const hasText = Boolean(content);
-        const hasImage = Boolean(imageUrl);
-
-        /*
-         * A message must contain something.
-         */
-        if (!hasText && !hasImage) {
+        if (
+          typeof imageSize !== "number" ||
+          imageSize <= 0 ||
+          imageSize > 10 * 1024 * 1024
+        ) {
           return callback?.({
             success: false,
-            error: "Message cannot be empty",
+            error: "Invalid image size",
           });
         }
 
-        /*
-         * Currently we support either text OR image.
-         * Captions can be added later.
-         */
-        if (hasText && hasImage) {
+        if (!imageName) {
           return callback?.({
             success: false,
-            error: "Message cannot contain both text and image",
+            error: "Image name is required",
           });
         }
+      }
 
-        /*
-         * Text validation
-         */
-        if (hasText && content && content.length > 5000) {
-          return callback?.({
-            success: false,
-            error: "Message is too long",
-          });
-        }
+      /*
+       * Verify conversation membership.
+       */
+      const member = await isConversationMember(
+        conversationId,
+        userId
+      );
 
-        /*
-         * Image validation
-         */
-        if (hasImage) {
-          const allowedImageTypes = [
-            "image/jpeg",
-            "image/png",
-            "image/webp",
-            "image/gif",
-          ];
+      if (!member) {
+        return callback?.({
+          success: false,
+          error:
+            "You are not a member of this conversation",
+        });
+      }
 
-          if (
-            !imageMimeType ||
-            !allowedImageTypes.includes(imageMimeType)
-          ) {
-            return callback?.({
-              success: false,
-              error: "Invalid image type",
-            });
-          }
-
-          if (
-            typeof imageSize !== "number" ||
-            imageSize <= 0 ||
-            imageSize > 10 * 1024 * 1024
-          ) {
-            return callback?.({
-              success: false,
-              error: "Invalid image size",
-            });
-          }
-
-          if (!imageName) {
-            return callback?.({
-              success: false,
-              error: "Image name is required",
-            });
-          }
-        }
-
-        /*
-         * Verify conversation membership.
-         */
-        const member = await isConversationMember(
-          conversationId,
-          userId
-        );
-
-        if (!member) {
-          return callback?.({
-            success: false,
-            error:
-              "You are not a member of this conversation",
-          });
-        }
-
-        /*
-         * Persist the message.
-         */
-        const message =
-          await prisma.message.create({
-            data: {
-              conversationId,
-              senderId: userId,
-
-              content,
-
-              imageUrl,
-              imageName,
-              imageSize,
-              imageMimeType,
-            },
-
-            include: {
-              sender: {
-                select: {
-                  id: true,
-                  username: true,
-                  avatarUrl: true,
-                },
-              },
-            },
-          });
-
-        /*
-         * Update conversation timestamp.
-         */
-        await prisma.conversation.update({
+      /*
+       * Persist the message.
+       */
+      const existingMessage =
+        await prisma.message.findFirst({
           where: {
-            id: conversationId,
+            conversationId,
           },
-
-          data: {
-            updatedAt: new Date(),
+          select: {
+            id: true,
           },
         });
 
-        /*
-         * Get conversation members.
-         */
-        const conversation =
-          await prisma.conversation.findUnique({
-            where: {
-              id: conversationId,
-            },
+      const isFirstMessage = !existingMessage;
 
-            select: {
-              members: {
+      const message = await prisma.message.create({
+          data: {
+            conversationId,
+            senderId: userId,
+            content,
+            imageUrl,
+            imageName,
+            imageSize,
+            imageMimeType,
+          },
+
+          include: {
+            sender: {
+              select: {
+                id: true,
+                username: true,
+                avatarUrl: true,
+              },
+            },
+          },
+        });
+
+      /*
+       * Update conversation timestamp.
+       */
+      await prisma.conversation.update({
+        where: {
+          id: conversationId,
+        },
+
+        data: {
+          updatedAt: new Date(),
+        },
+      });
+
+      /*
+       * Get conversation members.
+       */
+      const conversation = await prisma.conversation.findUnique({
+        where: {
+          id: conversationId,
+        },
+
+        select: {
+          id: true,
+          type: true,
+          name: true,
+          createdAt: true,
+          updatedAt: true,
+
+          members: {
+            include: {
+              user: {
                 select: {
-                  userId: true,
+                  id: true,
+                  username: true,
+                  email: true,
+                  avatarUrl: true,
+                  status: true,
+                  lastSeenAt: true,
                 },
               },
             },
-          });
+          },
+        },
+      });
 
-        if (!conversation) {
-          return callback?.({
-            success: false,
-            error: "Conversation not found",
-          });
+      if (!conversation) {
+        return callback?.({
+          success: false,
+          error: "Conversation not found",
+        });
+      }
+
+      /*
+       * Create the exact payload sent to clients.
+       */
+      const messagePayload = {
+        id: message.id,
+
+        conversationId: message.conversationId,
+
+        senderId: message.senderId,
+
+        content: message.content,
+
+        imageUrl: message.imageUrl,
+
+        imageName: message.imageName,
+
+        imageSize: message.imageSize,
+
+        imageMimeType: message.imageMimeType,
+
+        createdAt: message.createdAt.toISOString(),
+
+        updatedAt: message.updatedAt.toISOString(),
+
+        deletedAt: message.deletedAt,
+
+        editedAt: message.editedAt,
+
+        sender: message.sender,
+      };
+
+      const conversationPayload = {
+        id: conversation.id,
+        type: conversation.type,
+        name: conversation.name,
+        createdAt: conversation.createdAt.toISOString(),
+        updatedAt: conversation.updatedAt.toISOString(),
+
+        members: conversation.members,
+
+        messages: [
+          {
+            id: message.id,
+            content: message.content,
+            senderId: message.senderId,
+            createdAt: message.createdAt.toISOString(),
+            deletedAt: message.deletedAt ? message.deletedAt.toISOString() : null,
+            editedAt: message.editedAt ? message.editedAt.toISOString() : null,
+          },
+        ],
+
+        unreadCount: 0,
+      };
+
+      const room = `conversation:${conversationId}`;
+
+      /*
+       * Broadcast to everyone currently inside
+       * the conversation.
+       */
+      io.to(room).emit("message:new", messagePayload);
+
+      /*
+       * Notify conversation members through
+       * their user rooms.
+       */
+      for (const member of conversation.members) {
+        if (member.userId === userId) {
+          continue;
         }
 
-        /*
-         * Create the exact payload sent to clients.
-         */
-        const messagePayload = {
-          id: message.id,
-
-          conversationId:
-            message.conversationId,
-
-          senderId:
-            message.senderId,
-
-          content:
-            message.content,
-
-          imageUrl:
-            message.imageUrl,
-
-          imageName:
-            message.imageName,
-
-          imageSize:
-            message.imageSize,
-
-          imageMimeType:
-            message.imageMimeType,
-
-          createdAt:
-            message.createdAt.toISOString(),
-
-          updatedAt:
-            message.updatedAt.toISOString(),
-
-          deletedAt:
-            message.deletedAt,
-
-          editedAt:
-            message.editedAt,
-
-          sender:
-            message.sender,
-        };
-
-        const room =
-          `conversation:${conversationId}`;
-
-        /*
-         * Broadcast to everyone currently inside
-         * the conversation.
-         */
-        io.to(room).emit(
-          "message:new",
-          messagePayload
-        );
-
-        /*
-         * Notify conversation members through
-         * their user rooms.
-         */
-        for (const member of conversation.members) {
-          if (member.userId === userId) {
-            continue;
-          }
-
+        if (isFirstMessage) {
           io.to(`user:${member.userId}`).emit(
-            "conversation:unread",
+            "conversation:new",
             {
-              conversationId,
-              message: messagePayload,
+              ...conversationPayload,
+              unreadCount: 1,
             }
           );
         }
 
-        /*
-         * Acknowledge persistence to sender.
-         */
-        callback?.({
-          success: true,
-          message: messagePayload,
-        });
-
-      } catch (error) {
-        console.error(
-          "send_message error:",
-          error
+        io.to(`user:${member.userId}`).emit(
+          "conversation:unread",
+          {
+            conversationId,
+            message: messagePayload,
+            conversation: conversationPayload,
+          }
         );
-
-        callback?.({
-          success: false,
-          error: "Failed to send message",
-        });
       }
+
+      /*
+       * Acknowledge persistence to sender.
+       */
+      callback?.({
+        success: true,
+        message: messagePayload,
+      });
+
+    } catch (error) {
+      console.error(
+        "send_message error:",
+        error
+      );
+
+      callback?.({
+        success: false,
+        error: "Failed to send message",
+      });
     }
+  }
   );
 
   /*
@@ -771,19 +850,18 @@ io.on("connection", async (socket) => {
           });
         }
 
-        const conversation =
-          await prisma.conversation.findUnique({
-            where: {
-              id: result.conversationId,
-            },
-            select: {
-              members: {
-                select: {
-                  userId: true,
-                },
+        const conversation = await prisma.conversation.findUnique({
+          where: {
+            id: result.conversationId,
+          },
+          select: {
+            members: {
+              select: {
+                userId: true,
               },
             },
-          });
+          },
+        });
 
         if (!conversation) {
           return callback?.({
@@ -880,26 +958,24 @@ io.on("connection", async (socket) => {
           });
         }
 
-        const result =
-          await editMessage(
-            messageId,
-            userId,
-            content
-          );
+        const result = await editMessage(
+          messageId,
+          userId,
+          content
+        );
 
-        const conversation =
-          await prisma.conversation.findUnique({
-            where: {
-              id: result.conversationId,
-            },
-            select: {
-              members: {
-                select: {
-                  userId: true,
-                },
+        const conversation = await prisma.conversation.findUnique({
+          where: {
+            id: result.conversationId,
+          },
+          select: {
+            members: {
+              select: {
+                userId: true,
               },
             },
-          });
+          },
+        });
 
         if (!conversation) {
           return callback?.({
@@ -910,21 +986,13 @@ io.on("connection", async (socket) => {
 
         const editPayload = {
           id: result.id,
-          conversationId:
-            result.conversationId,
-          senderId:
-            result.senderId,
-          content:
-            result.content,
-          createdAt:
-            result.createdAt.toISOString(),
-          updatedAt:
-            result.updatedAt.toISOString(),
-          deletedAt:
-            result.deletedAt,
-          editedAt:
-            result.editedAt?.toISOString() ??
-            null,
+          conversationId: result.conversationId,
+          senderId: result.senderId,
+          content: result.content,
+          createdAt: result.createdAt.toISOString(),
+          updatedAt: result.updatedAt.toISOString(),
+          deletedAt: result.deletedAt,
+          editedAt: result.editedAt?.toISOString() ?? null,
         };
 
         for (const member of conversation.members) {
@@ -975,78 +1043,21 @@ io.on("connection", async (socket) => {
    * DISCONNECT
    */
   socket.on("disconnect", async (reason) => {
-    console.log(
-      `🟠 User ${userId} disconnected`,
-      {
-        socketId: socket.id,
-        reason,
-        instanceId,
-      }
+    console.log(`🟠 User ${userId} disconnected`,
+      { socketId: socket.id, reason, instanceId }
     );
 
     try {
-      const presence = await removeConnection(
-        userId,
-        socket.id
-      );
+      await syncUserPresence(userId);
 
-      /*
-       * Do not mark the user offline if they still
-       * have another active socket/tab/device.
-       */
-      if (!presence.online) {
-        const lastSeenAt = new Date();
-
-        await updateUserPresence(
-          userId,
-          "OFFLINE",
-          lastSeenAt
-        );
-
-        io.emit("presence:update", {
-          userId,
-          status: "OFFLINE",
-          lastSeenAt: lastSeenAt.toISOString(),
-        });
-      }
     } catch (error) {
-      console.error(
-        "Failed to remove realtime connection:",
-        error
-      );
+      console.error("Failed to remove realtime connection:", error);
     }
   });
 
-  /*
-   * CONNECTION PRESENCE
-   */
-  void addConnection(userId, socket.id)
-    .then(async () => {
-      try {
-        await updateUserPresence(
-          userId,
-          "ONLINE",
-          null
-        );
+  /*  CONNECTION PRESENCE */
 
-        io.emit("presence:update", {
-          userId,
-          status: "ONLINE",
-          lastSeenAt: null,
-        });
-      } catch (error) {
-        console.error(
-          "Failed to update online presence:",
-          error
-        );
-      }
-    })
-    .catch((error) => {
-      console.error(
-        "Failed to add realtime connection:",
-        error
-      );
-    });
+  await syncUserPresence(userId);
 
 }
 );

@@ -1,5 +1,4 @@
-const REALTIME_SERVER_URL =
-  process.env.REALTIME_SERVER_URL ?? "http://localhost:4000";
+const REALTIME_SERVER_URL = process.env.REALTIME_SERVER_URL ?? "http://localhost:4000";
 
 export async function emitToUser(
   userId: string,

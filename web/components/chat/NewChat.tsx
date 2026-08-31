@@ -91,56 +91,68 @@ export default function NewChat({
   }, [query]);
 
   async function startConversation(userId: string) {
-  try {
-    setCreatingUserId(userId);
-    setError("");
+    try {
+      setCreatingUserId(userId);
+      setError("");
 
-    const response = await fetch(
-      "/api/conversations/direct",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId,
-        }),
+      /*
+       * First check whether a conversation already exists.
+       *
+       * This does NOT create a conversation.
+       */
+      const response = await fetch(
+        "/api/conversations/direct",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            userId,
+          }),
+          cache: "no-store",
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ??
+          "Failed to open conversation"
+        );
       }
-    );
 
-    const data = await response.json();
+      /*
+       * Existing conversation:
+       * open it normally.
+       */
+      if (data.conversation?.id) {
+        router.push(
+          `/chat/${data.conversation.id}`
+        );
 
-    if (!response.ok) {
-      throw new Error(
-        data.error ??
-          "Failed to create conversation"
+        return;
+      }
+
+      router.push(
+        `/chat/draft/${userId}`
       );
-    }
-
-    if (!data.conversation?.id) {
-      throw new Error(
-        "Conversation ID was not returned by the server"
+    } catch (error) {
+      console.error(
+        "Start conversation error:",
+        error
       );
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Unable to start conversation."
+      );
+    } finally {
+      setCreatingUserId(null);
     }
-
-    router.push(
-      `/chat/${data.conversation.id}`
-    );
-  } catch (error) {
-    console.error(
-      "Start conversation error:",
-      error
-    );
-
-    setError(
-      error instanceof Error
-        ? error.message
-        : "Unable to start conversation."
-    );
-  } finally {
-    setCreatingUserId(null);
   }
-}
 
   return (
     <div className="mx-auto min-h-screen max-w-2xl p-6">
@@ -219,8 +231,8 @@ export default function NewChat({
 
                   {user.status ===
                     "ONLINE" && (
-                    <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-slate-950 bg-emerald-400" />
-                  )}
+                      <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-slate-950 bg-emerald-400" />
+                    )}
                 </div>
 
                 <div className="min-w-0 flex-1">
@@ -246,7 +258,7 @@ export default function NewChat({
                   className="rounded-lg bg-cyan-500 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {creatingUserId ===
-                  user.id
+                    user.id
                     ? "Opening..."
                     : "Chat"}
                 </button>

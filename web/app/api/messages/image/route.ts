@@ -12,7 +12,7 @@ const ALLOWED_TYPES = [
   "image/png",
   "image/webp",
   "image/gif",
-];
+] as const;
 
 export async function POST(request: Request) {
   try {
@@ -28,11 +28,17 @@ export async function POST(request: Request) {
       );
     }
 
+    /*
+     * Read multipart form data
+     */
     const formData = await request.formData();
 
     const file = formData.get("file");
     const conversationId = formData.get("conversationId");
 
+    /*
+     * Validate file
+     */
     if (!(file instanceof File)) {
       return NextResponse.json(
         {
@@ -43,10 +49,14 @@ export async function POST(request: Request) {
       );
     }
 
-    if (
-      typeof conversationId !== "string" ||
-      !conversationId.trim()
-    ) {
+    /*
+     * Validate conversation ID.
+     *
+     * This route expects the conversation to already exist.
+     * For a brand-new chat, ChatWindow must first call
+     * /api/conversations/direct and then use that returned ID.
+     */
+    if (typeof conversationId !== "string" || !conversationId.trim()) {
       return NextResponse.json(
         {
           success: false,
@@ -56,38 +66,41 @@ export async function POST(request: Request) {
       );
     }
 
-    const normalizedConversationId = conversationId.trim();
+    const normalizedConversationId =
+      conversationId.trim();
 
     /*
-     * Verify that the authenticated user actually
-     * belongs to this conversation.
+     * Verify conversation membership.
      */
-    const membership = await prisma.conversationMember.findUnique({
-      where: {
-        conversationId_userId: {
-          conversationId: normalizedConversationId,
-          userId: session.user.id,
+    const membership =
+      await prisma.conversationMember.findUnique({
+        where: {
+          conversationId_userId: {
+            conversationId:
+              normalizedConversationId,
+            userId: session.user.id,
+          },
         },
-      },
-      select: {
-        id: true,
-      },
-    });
+        select: {
+          id: true,
+        },
+      });
 
     if (!membership) {
       return NextResponse.json(
         {
           success: false,
-          error: "You are not a member of this conversation",
+          error:
+            "You are not a member of this conversation",
         },
         { status: 403 }
       );
     }
 
     /*
-     * Validate MIME type.
+     * Validate MIME type
      */
-    if (!ALLOWED_TYPES.includes(file.type)) {
+    if (!ALLOWED_TYPES.includes(file.type as any)) {
       return NextResponse.json(
         {
           success: false,
@@ -98,40 +111,77 @@ export async function POST(request: Request) {
     }
 
     /*
-     * Validate file size.
+     * Validate file size
      */
+    if (file.size <= 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Image file is empty",
+        },
+        { status: 400 }
+      );
+    }
+
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
         {
           success: false,
-          error: "Image must be smaller than 10 MB",
+          error:
+            "Image must be smaller than 10 MB",
         },
         { status: 400 }
       );
     }
 
     /*
-     * Generate a random storage filename.
+     * Generate a safe random storage filename.
      *
-     * We never use the original filename as the
-     * actual storage filename.
+     * Never use the original filename as the
+     * actual Supabase object name.
      */
-    const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+    const extension =
+      file.name
+        .split(".")
+        .pop()
+        ?.toLowerCase() || "jpg";
 
-    const fileName = `${crypto.randomUUID()}.${extension}`;
+    const fileName =
+      `${crypto.randomUUID()}.${extension}`;
 
-    const storagePath = `${normalizedConversationId}/${session.user.id}/${fileName}`;
+    /*
+     * Storage structure:
+     *
+     * conversationId/
+     *   userId/
+     *     random-file-name.ext
+     */
+    const storagePath =
+      `${normalizedConversationId}/${session.user.id}/${fileName}`;
 
-    const arrayBuffer = await file.arrayBuffer();
+    /*
+     * Convert File -> Buffer
+     */
+    const arrayBuffer =
+      await file.arrayBuffer();
 
-    const buffer = Buffer.from(arrayBuffer);
+    const buffer =
+      Buffer.from(arrayBuffer);
 
-    const { error: uploadError } = await supabaseAdmin.storage
+    /*
+     * Upload to Supabase Storage
+     */
+    const { error: uploadError } =
+      await supabaseAdmin.storage
         .from(BUCKET_NAME)
-        .upload(storagePath, buffer, {
-          contentType: file.type,
-          upsert: false,
-        });
+        .upload(
+          storagePath,
+          buffer,
+          {
+            contentType: file.type,
+            upsert: false,
+          }
+        );
 
     if (uploadError) {
       console.error(
@@ -149,13 +199,16 @@ export async function POST(request: Request) {
     }
 
     /*
-     * The bucket is expected to be public.
+     * Get public URL
+     *
+     * The bucket must be configured as public.
      */
     const {
       data: { publicUrl },
-    } = supabaseAdmin.storage
-      .from(BUCKET_NAME)
-      .getPublicUrl(storagePath);
+    } =
+      supabaseAdmin.storage
+        .from(BUCKET_NAME)
+        .getPublicUrl(storagePath);
 
     return NextResponse.json({
       success: true,

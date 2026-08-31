@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { getSocket } from "@/lib/socket";
+import { getSocket, disconnectSocket } from "@/lib/socket";
 import type { Socket } from "socket.io-client";
 import { signOut } from "next-auth/react";
 
@@ -24,11 +24,13 @@ interface ConversationMember {
 
 interface LastMessage {
   id: string;
-  content: string;
+  content: string | null;
   senderId: string;
   createdAt: string;
   deletedAt: string | null;
   editedAt: string | null;
+  imageUrl?: string | null;
+  imageName?: string | null;
 }
 
 interface Conversation {
@@ -139,8 +141,7 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
               return previousConversations;
             }
 
-            const conversation =
-              previousConversations[conversationIndex];
+            const conversation = previousConversations[conversationIndex];
 
             const updatedLastMessage: LastMessage = {
               id: message.id,
@@ -149,6 +150,8 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
               createdAt: message.createdAt,
               deletedAt: message.deletedAt ?? null,
               editedAt: message.editedAt ?? null,
+              imageUrl: message.imageUrl ?? null,
+              imageName: message.imageName ?? null,
             };
 
             const updatedConversation: Conversation = {
@@ -222,13 +225,17 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
           );
         };
 
-
         const handleConversationUnread = ({
           conversationId,
           message,
+          conversation: incomingConversation,
         }: {
           conversationId: string;
-          message: LastMessage;
+          message: LastMessage & {
+            imageUrl?: string | null;
+            imageName?: string | null;
+          };
+          conversation?: Conversation;
         }) => {
           if (!mounted) {
             return;
@@ -238,8 +245,7 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
             return;
           }
 
-          const currentlyViewing =
-            pathnameRef.current === `/chat/${conversationId}`;
+          const currentlyViewing = pathnameRef.current === `/chat/${conversationId}`;
 
           setConversations((previousConversations) => {
             const conversationIndex =
@@ -248,22 +254,63 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
                   conversation.id === conversationId
               );
 
-            if (conversationIndex === -1) {
+            /*
+             * Conversation is already in the sidebar.
+             */
+            if (conversationIndex !== -1) {
+              const existingConversation = previousConversations[conversationIndex];
+
+              const updatedConversation: Conversation = {
+                ...existingConversation,
+
+                updatedAt: message.createdAt,
+
+                messages: [
+                  {
+                    id: message.id,
+                    content: message.content ?? "",
+                    senderId: message.senderId,
+                    createdAt: message.createdAt,
+                    deletedAt: message.deletedAt ?? null,
+                    editedAt: message.editedAt ?? null,
+                  },
+                ],
+
+                unreadCount: currentlyViewing ? 0 : existingConversation.unreadCount + 1,
+              };
+
+              return [
+                updatedConversation,
+                ...previousConversations.filter(
+                  (_, index) =>
+                    index !== conversationIndex
+                ),
+              ];
+            }
+
+            /*
+             * Brand-new conversation.
+             */
+            if (!incomingConversation) {
+              console.warn(
+                "Received conversation:unread without conversation payload",
+                {
+                  conversationId,
+                }
+              );
+
               return previousConversations;
             }
 
-            const conversation =
-              previousConversations[conversationIndex];
-
-            const updatedConversation: Conversation = {
-              ...conversation,
+            const newConversation: Conversation = {
+              ...incomingConversation,
 
               updatedAt: message.createdAt,
 
               messages: [
                 {
                   id: message.id,
-                  content: message.content,
+                  content: message.content ?? "",
                   senderId: message.senderId,
                   createdAt: message.createdAt,
                   deletedAt: message.deletedAt ?? null,
@@ -271,17 +318,10 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
                 },
               ],
 
-              unreadCount: currentlyViewing
-                ? 0
-                : conversation.unreadCount + 1,
+              unreadCount: currentlyViewing ? 0 : 1,
             };
 
-            return [
-              updatedConversation,
-              ...previousConversations.filter(
-                (_, index) => index !== conversationIndex
-              ),
-            ];
+            return [newConversation, ...previousConversations];
           });
         };
 
@@ -374,13 +414,30 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
         };
 
         const handleConversationNew = (conversation: Conversation) => {
-          if (!mounted) return;
+          if (!mounted) {
+            return;
+          }
+
+          const normalizedConversation: Conversation = {
+            ...conversation,
+            messages: conversation.messages ?? [],
+            unreadCount: conversation.unreadCount ?? 0,
+          };
 
           setConversations((previous) => {
-            if (previous.some((c) => c.id === conversation.id)) {
+            const existingIndex = previous.findIndex(
+              (existingConversation) =>
+                existingConversation.id === normalizedConversation.id
+            );
+
+            if (existingIndex !== -1) {
               return previous;
             }
-            return [{ ...conversation, unreadCount: 0 }, ...previous];
+
+            return [
+              normalizedConversation,
+              ...previous,
+            ];
           });
         };
 
@@ -617,10 +674,8 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
 
                         <div className="mt-1 flex items-center justify-between gap-2">
                           <p className="min-w-0 truncate text-xs text-slate-500">
-                            {lastMessage
-                              ? lastMessage.deletedAt
-                                ? "This message was deleted"
-                                : lastMessage.content
+                            {lastMessage ? lastMessage.deletedAt ? "This message was deleted" : lastMessage.imageUrl
+                                  ? "🖼️ Image" : lastMessage.content
                               : "No messages yet"}
                           </p>
 
@@ -643,12 +698,13 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
         {/* Sidebar Footer */}
 
         <div className="border-t border-white/10 p-4">
-          <button
-            onClick={() =>
-              signOut({
-                callbackUrl: "/login",
-              })
-            }
+          <button onClick={async () => {
+
+            disconnectSocket();
+            await signOut({
+              callbackUrl: "/login",
+            });
+          }}
             className="flex w-full items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-sm font-medium text-red-400 transition hover:bg-red-500/20 hover:text-red-300"
           >
             Logout

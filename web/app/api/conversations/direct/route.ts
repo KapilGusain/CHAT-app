@@ -1,7 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import { emitToUser } from "@/lib/realtime-emit";
 
 export async function POST(request: Request) {
   try {
@@ -18,7 +17,7 @@ export async function POST(request: Request) {
 
     const otherUserId =
       typeof body.userId === "string"
-        ? body.userId
+        ? body.userId.trim()
         : "";
 
     if (!otherUserId) {
@@ -31,22 +30,20 @@ export async function POST(request: Request) {
     if (otherUserId === session.user.id) {
       return NextResponse.json(
         {
-          error:
-            "You cannot create a chat with yourself",
+          error: "You cannot create a chat with yourself",
         },
         { status: 400 }
       );
     }
 
-    const otherUser =
-      await prisma.user.findUnique({
-        where: {
-          id: otherUserId,
-        },
-        select: {
-          id: true,
-        },
-      });
+    const otherUser = await prisma.user.findUnique({
+      where: {
+        id: otherUserId,
+      },
+      select: {
+        id: true,
+      },
+    });
 
     if (!otherUser) {
       return NextResponse.json(
@@ -62,8 +59,7 @@ export async function POST(request: Request) {
       .sort()
       .join(":");
 
-    
-    const existingConversation =
+    const conversation =
       await prisma.conversation.findUnique({
         where: {
           directKey,
@@ -86,111 +82,19 @@ export async function POST(request: Request) {
         },
       });
 
-    if (existingConversation) {
-      return NextResponse.json({
-        conversation: existingConversation,
-        existing: true,
-      });
-    }
-
-    try {
-      const conversation = await prisma.conversation.create({
-          data: {
-            type: "DIRECT",
-            directKey,
-            createdById: session.user.id,
-
-            members: {
-              create: [
-                {
-                  userId: session.user.id,
-                },
-                {
-                  userId: otherUserId,
-                },
-              ],
-            },
-          },
-
-          include: {
-            members: {
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    username: true,
-                    email: true,
-                    avatarUrl: true,
-                    status: true,
-                    lastSeenAt: true,
-                  },
-                },
-              },
-            },
-          },
-        });
-        await emitToUser(otherUserId, "conversation:new", conversation);
-
-      return NextResponse.json(
-        {
-          conversation,
-          existing: false,
-        },
-        {
-          status: 201,
-        }
-      );
-    } catch (error: unknown) {
-      
-      if (
-        typeof error === "object" &&
-        error !== null &&
-        "code" in error &&
-        error.code === "P2002"
-      ) {
-        const conversation =
-          await prisma.conversation.findUnique({
-            where: {
-              directKey,
-            },
-            include: {
-              members: {
-                include: {
-                  user: {
-                    select: {
-                      id: true,
-                      username: true,
-                      email: true,
-                      avatarUrl: true,
-                      status: true,
-                      lastSeenAt: true,
-                    },
-                  },
-                },
-              },
-            },
-          });
-
-        if (conversation) {
-          return NextResponse.json({
-            conversation,
-            existing: true,
-          });
-        }
-      }
-
-      throw error;
-    }
+    return NextResponse.json({
+      conversation: conversation ?? null,
+      existing: Boolean(conversation),
+    });
   } catch (error) {
     console.error(
-      "Create direct conversation error:",
+      "Find direct conversation error:",
       error
     );
 
     return NextResponse.json(
       {
-        error:
-          "Failed to create conversation",
+        error: "Failed to find conversation",
       },
       {
         status: 500,

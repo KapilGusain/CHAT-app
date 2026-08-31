@@ -37,22 +37,23 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6">
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-8 backdrop-blur">
-        <h1 className="text-3xl font-bold text-white">
+    <main className="flex min-h-screen items-center justify-center bg-[#140f24] px-6">
+      <div className="w-full max-w-md rounded-lg border border-[#4a3d73]/35 bg-[#1e1836] p-8">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-[#9a8fbf]">
+          Sign in
+        </p>
+
+        <h1 className="mt-3 text-3xl font-semibold text-[#ede9f7]">
           Welcome back
         </h1>
 
-        <p className="mt-2 text-sm text-slate-400">
+        <p className="mt-2 text-sm text-[#9a8fbf]">
           Sign in to your account
         </p>
 
-        <form
-          onSubmit={handleSubmit}
-          className="mt-8 space-y-5"
-        >
+        <form onSubmit={handleSubmit} className="mt-8 space-y-5">
           <div>
-            <label className="mb-2 block text-sm text-slate-300">
+            <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-widest text-[#9a8fbf]">
               Email
             </label>
 
@@ -61,12 +62,12 @@ export default function LoginPage() {
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               required
-              className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none focus:border-cyan-400"
+              className="w-full rounded-md border border-[#4a3d73]/35 bg-[#140f24] px-4 py-3 text-sm text-[#ede9f7] outline-none placeholder:text-[#6b5f94] focus:border-[#8b6fd9]/60"
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-sm text-slate-300">
+            <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-widest text-[#9a8fbf]">
               Password
             </label>
 
@@ -75,12 +76,12 @@ export default function LoginPage() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               required
-              className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none focus:border-cyan-400"
+              className="w-full rounded-md border border-[#4a3d73]/35 bg-[#140f24] px-4 py-3 text-sm text-[#ede9f7] outline-none placeholder:text-[#6b5f94] focus:border-[#8b6fd9]/60"
             />
           </div>
 
           {error && (
-            <p className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400">
+            <p className="rounded-md bg-[#b14c6b]/10 px-4 py-3 font-mono text-xs text-[#c97b96]">
               {error}
             </p>
           )}
@@ -88,7 +89,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-md bg-[#8b6fd9] px-4 py-3.5 text-sm font-semibold uppercase tracking-wide text-[#140f24] transition hover:bg-[#a78bfa] disabled:cursor-not-allowed disabled:opacity-40"
           >
             {loading ? "Signing in..." : "Sign in"}
           </button>

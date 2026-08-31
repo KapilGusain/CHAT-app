@@ -34,9 +34,10 @@ interface Message {
 }
 
 interface ChatWindowProps {
-  conversationId: string;
+  conversationId?: string;
   currentUserId: string;
   chatUserName: string;
+  targetUserId?: string;
 }
 
 interface SocketResponse {
@@ -45,7 +46,7 @@ interface SocketResponse {
   message?: Message;
 }
 
-export default function ChatWindow({ conversationId, currentUserId, chatUserName }: ChatWindowProps) {
+export default function ChatWindow({ conversationId, currentUserId, chatUserName, targetUserId }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [content, setContent] = useState("");
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -79,86 +80,21 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
   const [editingContent, setEditingContent] = useState("");
   const [deleteMessageId, setDeleteMessageId] = useState<string | null>(null);
 
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(conversationId ?? null);
+  const activeConversationIdRef = useRef<string | null>(conversationId ?? null);
+  const joinedConversationIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId;
+  }, [activeConversationId]);
+
+  const hasRealConversation = Boolean(activeConversationId);
+
   /*
-   * Load existing messages
+   * Socket lifecycle
    */
   useEffect(() => {
     let mounted = true;
-
-    async function loadMessages() {
-      setLoading(true);
-
-      try {
-        const response = await fetch(
-          `/api/conversations/${conversationId}/messages`,
-          {
-            cache: "no-store",
-          }
-        );
-
-        if (!response.ok) {
-          console.error(
-            "Failed to load messages:",
-            response.status
-          );
-
-          return;
-        }
-
-        const data = await response.json();
-
-        if (!mounted) {
-          return;
-        }
-
-        const loadedMessages: Message[] = data.messages ?? [];
-
-        setMessages(loadedMessages);
-
-        setHasMoreMessages(data.hasMore === true);
-
-        const restoredReadMessages = new Set<string>();
-
-        for (const message of loadedMessages) {
-          if (
-            message.senderId === currentUserId &&
-            message.readByOtherUser === true
-          ) {
-            restoredReadMessages.add(message.id);
-          }
-        }
-
-        readMessagesRef.current = restoredReadMessages;
-        setReadMessages(restoredReadMessages);
-
-        shouldScrollToBottomRef.current = true;
-      } catch (error) {
-        console.error(
-          "Failed to load messages:",
-          error
-        );
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void loadMessages();
-
-    return () => {
-      mounted = false;
-    };
-  }, [conversationId, currentUserId]);
-
-  /*
- * Socket lifecycle
- */
-  useEffect(() => {
-    let mounted = true;
-    let currentSocket: Socket | null = null;
-    let joined = false;
-
     let cleanupSocket: (() => void) | null = null;
 
     async function setupSocket() {
@@ -169,64 +105,161 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           return;
         }
 
-        currentSocket = socket;
         socketRef.current = socket;
 
-        const joinConversation = () => {
-          if (!mounted) {
+        const joinCurrentConversation = async () => {
+          const currentConversationId =
+            activeConversationIdRef.current;
+
+          if (!mounted || !currentConversationId) {
+            roomReadyRef.current = false;
+            setRoomReady(false);
             return;
           }
 
           if (!socket.connected) {
-            console.log(
-              "⚠️ Cannot join conversation: socket is not connected"
+            setSocketReady(false);
+            roomReadyRef.current = false;
+            setRoomReady(false);
+            return;
+          }
+
+          if (
+            joinedConversationIdRef.current ===
+            currentConversationId
+          ) {
+            roomReadyRef.current = true;
+            setRoomReady(true);
+            return;
+          }
+
+          /*
+           * Leave previously joined conversation first.
+           */
+          const previousConversationId =
+            joinedConversationIdRef.current;
+
+          if (
+            previousConversationId &&
+            previousConversationId !==
+            currentConversationId
+          ) {
+            socket.emit(
+              "conversation:leave",
+              previousConversationId
             );
 
-            setSocketReady(false);
+            joinedConversationIdRef.current =
+              null;
+
+            roomReadyRef.current = false;
             setRoomReady(false);
-
-            return;
           }
 
-          if (joined) {
-            return;
-          }
+          try {
+            await joinConversationRoom(
+              socket,
+              currentConversationId
+            );
 
-          socket.emit("conversation:join",
-            conversationId,
-            (response: SocketResponse) => {
-              if (!mounted) {
-                return;
-              }
-
-              if (!response.success) {
-                joined = false;
-
-                roomReadyRef.current = false;
-                setRoomReady(false);
-
-                console.error(
-                  "❌ Failed to join conversation:",
-                  response.error
-                );
-
-                return;
-              }
-
-              joined = true;
-
-              roomReadyRef.current = true;
-              setRoomReady(true);
-
-              markConversationAsRead(socket);
+            if (!mounted) {
+              return;
             }
-          );
+
+            markConversationAsRead(
+              socket,
+              currentConversationId
+            );
+          } catch (error) {
+            console.error(
+              "❌ Failed to join conversation:",
+              error
+            );
+
+            if (mounted) {
+              joinedConversationIdRef.current =
+                null;
+
+              roomReadyRef.current = false;
+              setRoomReady(false);
+            }
+          }
         };
 
-        const handleNewMessage = (message: Message) => {
+        const handleConnect = () => {
+          if (!mounted) {
+            return;
+          }
+
+          console.log(
+            "🟢 ChatWindow socket connected:",
+            socket.id
+          );
+
+          setSocketReady(true);
+
+          joinedConversationIdRef.current =
+            null;
+
+          roomReadyRef.current = false;
+          setRoomReady(false);
+
+          void joinCurrentConversation();
+        };
+
+        const handleDisconnect = (
+          reason: string
+        ) => {
+          if (!mounted) {
+            return;
+          }
+
+          console.log(
+            "🟠 ChatWindow socket disconnected:",
+            reason
+          );
+
+          joinedConversationIdRef.current =
+            null;
+
+          setSocketReady(false);
+
+          roomReadyRef.current = false;
+          setRoomReady(false);
+        };
+
+        const handleConnectError = (
+          error: Error
+        ) => {
+          if (!mounted) {
+            return;
+          }
+
+          console.error(
+            "🔴 ChatWindow socket connection error:",
+            error.message
+          );
+
+          setSocketReady(false);
+
+          joinedConversationIdRef.current =
+            null;
+
+          roomReadyRef.current = false;
+          setRoomReady(false);
+        };
+
+        const handleNewMessage = (
+          message: Message
+        ) => {
+          const currentConversationId =
+            activeConversationIdRef.current;
+
           if (
             !mounted ||
-            message.conversationId !== conversationId
+            !currentConversationId ||
+            message.conversationId !==
+            currentConversationId
           ) {
             return;
           }
@@ -234,16 +267,24 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           shouldScrollToBottomRef.current = true;
 
           setMessages((previousMessages) => {
-            const exists = previousMessages.some(
-              (existingMessage) =>
-                existingMessage.id === message.id
-            );
+            const exists =
+              previousMessages.some(
+                (existingMessage) =>
+                  existingMessage.id ===
+                  message.id
+              );
 
             if (exists) {
               return previousMessages;
             }
 
-            if (message.senderId === currentUserId) {
+            /*
+             * Reconcile optimistic message.
+             */
+            if (
+              message.senderId ===
+              currentUserId
+            ) {
               const optimisticIndex =
                 previousMessages.findIndex(
                   (existingMessage) => {
@@ -309,7 +350,8 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
         }) => {
           if (
             !mounted ||
-            data.conversationId !== conversationId
+            data.conversationId !==
+            activeConversationIdRef.current
           ) {
             return;
           }
@@ -319,7 +361,8 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
 
             next.add(data.messageId);
 
-            readMessagesRef.current = next;
+            readMessagesRef.current =
+              next;
 
             return next;
           });
@@ -332,7 +375,8 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
         }) => {
           if (
             !mounted ||
-            data.conversationId !== conversationId
+            data.conversationId !==
+            activeConversationIdRef.current
           ) {
             return;
           }
@@ -343,7 +387,8 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
                 ? {
                   ...message,
                   content: "",
-                  deletedAt: data.deletedAt,
+                  deletedAt:
+                    data.deletedAt,
                 }
                 : message
             )
@@ -362,7 +407,8 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
         }) => {
           if (
             !mounted ||
-            data.conversationId !== conversationId
+            data.conversationId !==
+            activeConversationIdRef.current
           ) {
             return;
           }
@@ -372,100 +418,23 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
               message.id === data.id
                 ? {
                   ...message,
-                  content: data.content,
-                  updatedAt: data.updatedAt,
-                  editedAt: data.editedAt,
-                  deletedAt: data.deletedAt,
+                  content:
+                    data.content,
+                  updatedAt:
+                    data.updatedAt,
+                  editedAt:
+                    data.editedAt,
+                  deletedAt:
+                    data.deletedAt,
                 }
                 : message
             )
           );
         };
 
-        const handleConnect = () => {
-          if (!mounted) {
-            return;
-          }
-
-          console.log(
-            "🟢 ChatWindow socket connected:",
-            socket.id
-          );
-
-          setSocketReady(true);
-
-          joined = false;
-
-          roomReadyRef.current = false;
-          setRoomReady(false);
-
-          joinConversation();
-        };
-
-        const handleDisconnect = (
-          reason: string
-        ) => {
-          if (!mounted) {
-            return;
-          }
-
-          console.log(
-            "🟠 ChatWindow socket disconnected:",
-            reason
-          );
-
-          joined = false;
-
-          setSocketReady(false);
-
-          roomReadyRef.current = false;
-          setRoomReady(false);
-        };
-
-        const handleConnectError = (
-          error: Error
-        ) => {
-          if (!mounted) {
-            return;
-          }
-
-          console.error(
-            "🔴 ChatWindow socket connection error:",
-            error.message
-          );
-
-          setSocketReady(false);
-
-          roomReadyRef.current = false;
-          setRoomReady(false);
-        };
-
-        /*
-         * Register listeners.
-         */
-        socket.on(
-          "message:new",
-          handleNewMessage
-        );
-
         socket.on(
           "connect",
           handleConnect
-        );
-
-        socket.on(
-          "message:read",
-          handleMessageRead
-        );
-
-        socket.on(
-          "message:edited",
-          handleMessageEdited
-        );
-
-        socket.on(
-          "message:deleted",
-          handleMessageDeleted
         );
 
         socket.on(
@@ -478,40 +447,40 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           handleConnectError
         );
 
-        /*
-         * Define cleanup immediately after
-         * registering the listeners.
-         */
+        socket.on(
+          "message:new",
+          handleNewMessage
+        );
+
+        socket.on(
+          "message:read",
+          handleMessageRead
+        );
+
+        socket.on(
+          "message:deleted",
+          handleMessageDeleted
+        );
+
+        socket.on(
+          "message:edited",
+          handleMessageEdited
+        );
+
         cleanupSocket = () => {
-          if (joined) {
-            socket.emit("conversation:leave",
-              conversationId
+          const joinedConversationId =
+            joinedConversationIdRef.current;
+
+          if (joinedConversationId) {
+            socket.emit(
+              "conversation:leave",
+              joinedConversationId
             );
           }
 
           socket.off(
-            "message:new",
-            handleNewMessage
-          );
-
-          socket.off(
             "connect",
             handleConnect
-          );
-
-          socket.off(
-            "message:read",
-            handleMessageRead
-          );
-
-          socket.off(
-            "message:edited",
-            handleMessageEdited
-          );
-
-          socket.off(
-            "message:deleted",
-            handleMessageDeleted
           );
 
           socket.off(
@@ -524,57 +493,59 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
             handleConnectError
           );
 
-          joined = false;
+          socket.off(
+            "message:new",
+            handleNewMessage
+          );
 
-          if (
-            socketRef.current === socket
-          ) {
-            socketRef.current = null;
-          }
+          socket.off(
+            "message:read",
+            handleMessageRead
+          );
+
+          socket.off(
+            "message:deleted",
+            handleMessageDeleted
+          );
+
+          socket.off(
+            "message:edited",
+            handleMessageEdited
+          );
+
+          joinedConversationIdRef.current =
+            null;
 
           roomReadyRef.current = false;
+
+          if (socketRef.current === socket) {
+            socketRef.current = null;
+          }
         };
 
-        /*
-         * If cleanup happened while getSocket()
-         * was resolving, don't connect/join.
-         */
-        if (!mounted) {
-          cleanupSocket();
-          cleanupSocket = null;
-          return;
-        }
-
-        /*
-         * Socket is already connected.
-         */
         if (socket.connected) {
-          console.log(
-            "🟢 Socket already connected:",
-            socket.id
-          );
-
           setSocketReady(true);
 
-          joinConversation();
+          await joinCurrentConversation();
         } else {
-          console.log(
-            "🟡 Socket not connected yet. Waiting for connect..."
-          );
-
           setSocketReady(false);
+
+          roomReadyRef.current = false;
           setRoomReady(false);
 
           socket.connect();
         }
       } catch (error) {
         console.error(
-          " Failed to initialize chat socket:",
+          "❌ Failed to initialize chat socket:",
           error
         );
 
         if (mounted) {
           setSocketReady(false);
+
+          joinedConversationIdRef.current =
+            null;
 
           roomReadyRef.current = false;
           setRoomReady(false);
@@ -584,35 +555,110 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
 
     void setupSocket();
 
-    /*
-     *  React cleanup.
-     */
     return () => {
       mounted = false;
 
       cleanupSocket?.();
       cleanupSocket = null;
 
-      currentSocket = null;
-      joined = false;
-
-      roomReadyRef.current = false;
-
-      if (socketRef.current) {
-        socketRef.current = null;
-      }
-
       setRoomReady(false);
       setSocketReady(false);
     };
-  }, [conversationId]);
+  }, [currentUserId]);
 
-  function markConversationAsRead(socket: Socket) {
-    if (!socket.connected || !conversationId) {
+  useEffect(() => {
+    const currentConversationId = activeConversationId;
+
+    if (!currentConversationId) {
+      setMessages([]);
+      setHasMoreMessages(false);
+      setLoading(false);
+
+      readMessagesRef.current =
+        new Set();
+
+      setReadMessages(new Set());
+
       return;
     }
 
-    socket.emit("conversation:read", conversationId);
+    let mounted = true;
+
+    async function loadMessages() {
+      setLoading(true);
+
+      try {
+        const response = await fetch(
+          `/api/conversations/${currentConversationId}/messages`,
+          {
+            cache: "no-store",
+          }
+        );
+
+        if (!response.ok) {
+          console.error(
+            "Failed to load messages:",
+            response.status
+          );
+
+          return;
+        }
+
+        const data = await response.json();
+
+        if (!mounted) {
+          return;
+        }
+
+        const loadedMessages: Message[] = data.messages ?? [];
+
+        setMessages(loadedMessages);
+
+        setHasMoreMessages(data.hasMore === true);
+
+        const restoredReadMessages = new Set<string>();
+
+        for (const message of loadedMessages) {
+          if (message.senderId === currentUserId && message.readByOtherUser === true) {
+            restoredReadMessages.add(message.id);
+          }
+        }
+
+        readMessagesRef.current = restoredReadMessages;
+        setReadMessages(restoredReadMessages);
+        shouldScrollToBottomRef.current = true;
+
+      } catch (error) {
+        console.error("Failed to load messages:", error);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadMessages();
+
+    return () => {
+      mounted = false;
+    };
+  }, [activeConversationId, currentUserId]);
+
+  function markConversationAsRead(
+    socket: Socket,
+    conversationId: string
+  ) {
+    if (
+      !socket.connected ||
+      !conversationId
+    ) {
+      return;
+    }
+
+    socket.emit(
+      "conversation:read",
+      conversationId
+    );
   }
 
   function markMessageAsRead(socket: Socket, messageId: string) {
@@ -824,7 +870,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
 
     try {
       const response = await fetch(
-        `/api/conversations/${conversationId}/messages?before=${encodeURIComponent(
+        `/api/conversations/${activeConversationId}/messages?before=${encodeURIComponent(
           oldestMessage.createdAt
         )}`,
         {
@@ -974,11 +1020,26 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
       return;
     }
 
-    if (!roomReady) {
-      console.error(
-        "Cannot send image: conversation room is not ready"
+    const socket = socketRef.current ?? (await getSocket());
+
+    socketRef.current = socket;
+
+    if (!socket.connected) {
+      throw new Error(
+        "Socket is not connected"
       );
-      return;
+    }
+
+    const resolvedConversationId = await ensureConversation();
+
+    if (
+      joinedConversationIdRef.current !==
+      resolvedConversationId
+    ) {
+      await joinConversationRoom(
+        socket,
+        resolvedConversationId
+      );
     }
 
     try {
@@ -1000,23 +1061,17 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
         file
       );
 
-      formData.append(
-        "conversationId",
-        conversationId
+      formData.append("conversationId", resolvedConversationId);
+
+      const uploadResponse = await fetch("/api/messages/image",
+        {
+          method: "POST",
+          body: formData,
+          cache: "no-store",
+        }
       );
 
-      const uploadResponse =
-        await fetch(
-          "/api/messages/image",
-          {
-            method: "POST",
-            body: formData,
-            cache: "no-store",
-          }
-        );
-
-      const uploadData =
-        await uploadResponse.json();
+      const uploadData = await uploadResponse.json();
 
       if (
         !uploadResponse.ok ||
@@ -1047,44 +1102,27 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
       /*
        * Create optimistic ID.
        */
-      const optimisticId =
-        `optimistic-image-${conversationId}-${Date.now()}-${Math.random()
-          .toString(36)
-          .slice(2)}`;
+      const optimisticId = `optimistic-image-${resolvedConversationId}-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}`;
 
       /*
        * Show image immediately.
        */
       const optimisticMessage: Message = {
         id: optimisticId,
-
-        conversationId,
-
-        senderId:
-          currentUserId,
-
+        conversationId: resolvedConversationId,
+        senderId: currentUserId,
         content: null,
 
-        imageUrl:
-          uploadData.imageUrl,
+        imageUrl: uploadData.imageUrl,
+        imageName: uploadData.imageName,
+        imageSize: uploadData.imageSize,
+        imageMimeType: uploadData.imageMimeType,
 
-        imageName:
-          uploadData.imageName,
-
-        imageSize:
-          uploadData.imageSize,
-
-        imageMimeType:
-          uploadData.imageMimeType,
-
-        createdAt:
-          new Date().toISOString(),
-
-        updatedAt:
-          new Date().toISOString(),
-
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         deletedAt: null,
-
         editedAt: null,
 
         sender: {
@@ -1107,34 +1145,18 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
        * Send the persisted image metadata
        * through Socket.IO.
        */
-      socket.emit(
-        "send_message",
-        {
-          conversationId,
+      socket.emit("send_message", {
+        conversationId: resolvedConversationId,
+        content: null,
 
-          content: null,
-
-          imageUrl:
-            uploadData.imageUrl,
-
-          imageName:
-            uploadData.imageName,
-
-          imageSize:
-            uploadData.imageSize,
-
-          imageMimeType:
-            uploadData.imageMimeType,
-        },
-        (
-          response: SocketResponse
-        ) => {
-          if (
-            !response.success ||
-            !response.message
-          ) {
-            console.error(
-              "❌ Failed to send image message:",
+        imageUrl: uploadData.imageUrl,
+        imageName: uploadData.imageName,
+        imageSize: uploadData.imageSize,
+        imageMimeType: uploadData.imageMimeType,
+      },
+        (response: SocketResponse) => {
+          if (!response.success || !response.message) {
+            console.error("❌ Failed to send image message:",
               response.error
             );
 
@@ -1185,6 +1207,105 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
     }
   }
 
+  async function ensureConversation(): Promise<string> {
+    const existingConversationId = activeConversationIdRef.current;
+
+    if (existingConversationId) {
+      return existingConversationId;
+    }
+
+    if (!targetUserId) {
+      throw new Error(
+        "Target user is required for a new conversation"
+      );
+    }
+
+    const response = await fetch("/api/conversations/direct",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: targetUserId,
+        }),
+        cache: "no-store",
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error ??
+        "Failed to create conversation"
+      );
+    }
+
+    const newConversationId = data.conversation?.id;
+
+    if (!newConversationId) {
+      throw new Error(
+        "Conversation was not created"
+      );
+    }
+    activeConversationIdRef.current = newConversationId;
+    setActiveConversationId(newConversationId);
+
+    return newConversationId;
+  }
+
+  async function joinConversationRoom(
+    socket: Socket,
+    conversationId: string
+  ) {
+    if (!socket.connected) {
+      throw new Error(
+        "Socket is not connected"
+      );
+    }
+
+    if (
+      joinedConversationIdRef.current ===
+      conversationId
+    ) {
+      roomReadyRef.current = true;
+      setRoomReady(true);
+      return;
+    }
+
+    await new Promise<void>(
+      (resolve, reject) => {
+        socket.emit(
+          "conversation:join",
+          conversationId,
+          (
+            response: SocketResponse
+          ) => {
+            if (!response.success) {
+              reject(
+                new Error(
+                  response.error ??
+                  "Failed to join conversation"
+                )
+              );
+
+              return;
+            }
+
+            joinedConversationIdRef.current =
+              conversationId;
+
+            roomReadyRef.current = true;
+            setRoomReady(true);
+
+            resolve();
+          }
+        );
+      }
+    );
+  }
+
   /*
    * Send message
    */
@@ -1196,9 +1317,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
     }
 
     try {
-      const socket =
-        socketRef.current ??
-        (await getSocket());
+      const socket = socketRef.current ?? (await getSocket());
 
       socketRef.current = socket;
 
@@ -1209,39 +1328,36 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
         return;
       }
 
-      if (!roomReady) {
-        console.error(
-          "❌ Cannot send message: conversation room is not ready"
+      const resolvedConversationId = await ensureConversation();
+
+      if (
+        joinedConversationIdRef.current !==
+        resolvedConversationId
+      ) {
+        await joinConversationRoom(
+          socket,
+          resolvedConversationId
         );
-        return;
       }
 
-      /*
-       * Create a temporary client-side ID.
-       *
-       * This message exists only in React state.
-       */
       const optimisticId =
-        `optimistic-${conversationId}-${Date.now()}-${Math.random()
+        `optimistic-${resolvedConversationId}-${Date.now()}-${Math.random()
           .toString(36)
           .slice(2)}`;
 
-      /*
-       * Create optimistic message.
-       */
       const optimisticMessage: Message = {
         id: optimisticId,
-        conversationId,
+        conversationId:
+          resolvedConversationId,
         senderId: currentUserId,
         content: trimmed,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt:
+          new Date().toISOString(),
+        updatedAt:
+          new Date().toISOString(),
         deletedAt: null,
         editedAt: null,
 
-        /*
-         * We already know who the sender is.
-         */
         sender: {
           id: currentUserId,
           username: "You",
@@ -1251,64 +1367,71 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
         deliveryStatus: "pending",
       };
 
-      /*
-       * Immediately show the message.
-       */
-      setMessages((previousMessages) => [
-        ...previousMessages,
-        optimisticMessage,
-      ]);
+      setMessages(
+        (previousMessages) => [
+          ...previousMessages,
+          optimisticMessage,
+        ]
+      );
 
-      /*
-       * Clear the input immediately.
-       */
       setContent("");
 
       socket.emit(
         "send_message",
         {
-          conversationId,
+          conversationId:
+            resolvedConversationId,
           content: trimmed,
         },
-        (response: SocketResponse) => {
-          /*
-           * Server rejected the message.
-           */
-          if (!response.success || !response.message) {
+        (
+          response: SocketResponse
+        ) => {
+          if (
+            !response.success ||
+            !response.message
+          ) {
             console.error(
               "❌ Failed to send message:",
               response.error
             );
 
-            setMessages((previousMessages) =>
-              previousMessages.map((message) =>
-                message.id === optimisticId
-                  ? {
-                    ...message,
-                    deliveryStatus: "failed",
-                  }
-                  : message
-              )
+            setMessages(
+              (previousMessages) =>
+                previousMessages.map(
+                  (message) =>
+                    message.id ===
+                      optimisticId
+                      ? {
+                        ...message,
+                        deliveryStatus:
+                          "failed",
+                      }
+                      : message
+                )
             );
 
             return;
           }
 
-          /*
-           * Server successfully persisted the message.
-           *
-           * Replace optimistic message with the
-           * actual database message.
-           */
-          setMessages((previousMessages) =>
-            previousMessages.map((message) =>
-              message.id === optimisticId
-                ? {
-                  ...response.message!,
-                  deliveryStatus: "sent",
-                }
-                : message
-            )
+          setMessages(
+            (previousMessages) =>
+              previousMessages.map(
+                (message) =>
+                  message.id ===
+                    optimisticId
+                    ? {
+                      ...response.message!,
+                      deliveryStatus:
+                        "sent",
+                    }
+                    : message
+              )
+          );
+
+          window.history.replaceState(
+            null,
+            "",
+            `/chat/${response.message!.conversationId}`
           );
         }
       );
@@ -1321,22 +1444,23 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
   }
 
   return (
-    <div className="flex h-150 flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+    <div className="flex h-150 flex-col overflow-hidden rounded-lg border border-[#4a3d73]/25 bg-[#140f24] shadow-[0_0_0_1px_rgba(0,0,0,0.4)]">
+      {/* Signal strip */}
+      <div className="h-[3px] w-full bg-gradient-to-r from-[#8b6fd9] via-[#8b6fd9]/40 to-transparent" />
 
       {/* Header */}
-      {/* Header */}
-      <div className="relative border-b border-white/10 px-5 py-4">
+      <div className="relative border-b border-[#4a3d73]/25 px-5 py-4">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <h2 className="truncate font-semibold text-white">
+            <h2 className="truncate font-semibold text-[#ede9f7]">
               {chatUserName}
             </h2>
 
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 font-mono text-[10px] uppercase tracking-widest text-[#9a8fbf]">
               {roomReady
-                ? "Realtime connected"
+                ? "Channel open"
                 : socketReady
-                  ? "Joining conversation..."
+                  ? "Joining channel..."
                   : "Connecting..."}
             </p>
           </div>
@@ -1353,29 +1477,25 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
                   setSearchResults([]);
                 }
               }}
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white"
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-[#4a3d73]/35 bg-[#1e1836] text-[#9a8fbf] transition hover:border-[#8b6fd9]/50 hover:text-[#ede9f7]"
               title="Search messages"
             >
-              🔍
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" strokeLinecap="round" />
+              </svg>
             </button>
 
-            {/* Connection status */}
+            {/* Connection signal bars */}
             <div className="flex items-center gap-2">
-              <span
-                className={`h-2 w-2 rounded-full ${roomReady
-                  ? "bg-emerald-400"
-                  : socketReady
-                    ? "bg-amber-400"
-                    : "bg-red-400"
-                  }`}
-              />
+              <div className="flex items-end gap-[3px]" title={roomReady ? "Live" : socketReady ? "Joining" : "Offline"}>
+                <span className={`h-2 w-[3px] rounded-sm ${roomReady || socketReady ? "bg-[#8b6fd9]" : "bg-[#b14c6b]"}`} />
+                <span className={`h-3 w-[3px] rounded-sm ${roomReady ? "bg-[#8b6fd9]" : socketReady ? "bg-[#8b6fd9]/40" : "bg-[#b14c6b]/30"}`} />
+                <span className={`h-4 w-[3px] rounded-sm ${roomReady ? "bg-[#8b6fd9]" : "bg-[#4a3d73]/30"}`} />
+              </div>
 
-              <span className="text-xs text-slate-400">
-                {roomReady
-                  ? "Live"
-                  : socketReady
-                    ? "Joining"
-                    : "Offline"}
+              <span className="font-mono text-[10px] uppercase tracking-widest text-[#9a8fbf]">
+                {roomReady ? "Live" : socketReady ? "Joining" : "Offline"}
               </span>
             </div>
           </div>
@@ -1406,7 +1526,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
                   }}
                   autoFocus
                   placeholder="Search messages..."
-                  className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 pr-10 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-400"
+                  className="w-full rounded-md border border-[#4a3d73]/35 bg-[#140f24] px-4 py-2.5 pr-10 text-sm text-[#ede9f7] outline-none placeholder:text-[#6b5f94] focus:border-[#8b6fd9]/60"
                 />
 
                 {searchQuery && (
@@ -1417,7 +1537,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
                       setSearchResults([]);
                       setSearchPerformed(false);
                     }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-white"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9a8fbf] transition hover:text-[#ede9f7]"
                     title="Clear search"
                   >
                     ×
@@ -1429,7 +1549,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
                 type="button"
                 onClick={searchMessages}
                 disabled={!searchQuery.trim()}
-                className="rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md bg-[#8b6fd9] px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-wide text-[#140f24] transition hover:bg-[#a78bfa] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Search
               </button>
@@ -1442,7 +1562,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
                   setSearchResults([]);
                   setSearchPerformed(false);
                 }}
-                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-lg leading-none text-slate-400 transition hover:bg-white/10 hover:text-white"
+                className="rounded-md border border-[#4a3d73]/35 bg-[#1e1836] px-3 py-2.5 text-lg leading-none text-[#9a8fbf] transition hover:text-[#ede9f7]"
                 title="Close search"
                 aria-label="Close search"
               >
@@ -1450,36 +1570,35 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
               </button>
             </div>
 
-
             {/* Search results */}
             {searchPerformed && (
-              <div className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-white/10 bg-slate-950 shadow-xl">
+              <div className="mt-3 max-h-64 overflow-y-auto rounded-md border border-[#4a3d73]/30 bg-[#140f24] shadow-xl">
                 {searchResults.length === 0 ? (
                   <div className="p-4 text-center">
-                    <p className="text-xs text-slate-500">
+                    <p className="font-mono text-xs text-[#9a8fbf]">
                       No messages found in current messages.
                     </p>
 
                     {hasMoreMessages && (
-                      <p className="mt-1 text-[11px] text-slate-600">
+                      <p className="mt-1 font-mono text-[11px] text-[#6b5f94]">
                         Go to previous messages to search older messages.
                       </p>
                     )}
                   </div>
                 ) : (
-                  <div className="divide-y divide-white/5">
+                  <div className="divide-y divide-[#4a3d73]/20">
                     {searchResults.map((message) => (
                       <button
                         key={message.id}
                         type="button"
                         onClick={() => void openSearchResult(message)}
-                        className="w-full px-4 py-3 text-left transition hover:bg-white/5"
+                        className="w-full px-4 py-3 text-left transition hover:bg-[#1e1836]"
                       >
-                        <p className="text-xs font-medium text-cyan-400">
+                        <p className="font-mono text-[10px] uppercase tracking-widest text-[#a78bfa]">
                           {message.sender.username}
                         </p>
 
-                        <p className="mt-1 line-clamp-2 text-sm text-slate-300">
+                        <p className="mt-1 line-clamp-2 text-sm text-[#cfc8e6]">
                           {message.deletedAt ? "This message was deleted" : message.content}
                         </p>
                       </button>
@@ -1495,210 +1614,205 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
       {/* Messages */}
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-5">
         {loading ? (
-          <p className="text-sm text-slate-500">
+          <p className="font-mono text-xs uppercase tracking-widest text-[#9a8fbf]">
             Loading messages...
           </p>
         ) : messages.length === 0 ? (
-          <p className="text-sm text-slate-500">
+          <p className="font-mono text-xs uppercase tracking-widest text-[#9a8fbf]">
             No messages yet.
           </p>
         ) : (
-
           <>
             {!loading && hasMoreMessages && (
               <div className="mb-4 flex justify-center">
                 <button
                   onClick={loadPreviousMessages}
                   disabled={loadingPrevious}
-                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-slate-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-md border border-[#4a3d73]/30 bg-[#1e1836] px-4 py-2 font-mono text-[11px] uppercase tracking-wide text-[#9a8fbf] transition hover:text-[#ede9f7] disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {loadingPrevious
-                    ? "Loading previous messages..."
-                    : "See previous messages"}
+                  {loadingPrevious ? "Loading previous messages..." : "See previous messages"}
                 </button>
               </div>
             )}
 
             <div className="space-y-3">
-              {messages.map(
-                (message) => {
-                  const own =
-                    message.senderId === currentUserId;
+              {messages.map((message) => {
+                const own = message.senderId === currentUserId;
 
-                  return (
+                return (
+                  <div
+                    key={message.id}
+                    ref={(element) => {
+                      messageRefs.current[message.id] = element;
+                    }}
+                    className={`flex ${own ? "justify-end" : "justify-start"}`}
+                  >
                     <div
-                      key={message.id}
-                      ref={(element) => {
-                        messageRefs.current[message.id] = element;
-                      }}
-                      className={`flex ${own ? "justify-end" : "justify-start"}`}
+                      className={`max-w-[75%] px-4 py-3 ${own
+                        ? "rounded-lg rounded-br-sm bg-[#8b6fd9] text-[#140f24]"
+                        : "rounded-lg rounded-bl-sm border border-[#4a3d73]/30 bg-[#1e1836] text-[#ede9f7]"
+                        }`}
                     >
-                      <div
-                        className={`max-w-[75%] rounded-2xl px-4 py-3 ${own
-                          ? "bg-cyan-500 text-slate-950"
-                          : "bg-slate-800 text-white"
-                          }`}
-                      >
-                        {!own && (
-                          <p className="mb-1 text-xs font-medium opacity-60">
-                            {
-                              message.sender.username
-                            }
-                          </p>
-                        )}
+                      {!own && (
+                        <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-[#9a8fbf]">
+                          {message.sender.username}
+                        </p>
+                      )}
 
-                        {own && !message.deletedAt && (
-                          <div className="mb-2 flex justify-end gap-1">
+                      {own && !message.deletedAt && (
+                        <div className="mb-2 flex justify-end gap-1">
+                          <button
+                            onClick={() => startEditingMessage(message)}
+                            className="rounded px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-[#140f24]/60 hover:bg-black/10"
+                          >
+                            Edit
+                          </button>
+
+                          <button
+                            onClick={() => requestDeleteMessage(message.id)}
+                            className="rounded px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-[#5c1a3a] hover:bg-black/10"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
+
+                      {message.deletedAt ? (
+                        <p className="text-sm italic opacity-60">
+                          This message was deleted
+                        </p>
+                      ) : editingMessageId === message.id ? (
+                        <div className="min-w-[240px]">
+                          <textarea
+                            value={editingContent}
+                            onChange={(event) => setEditingContent(event.target.value)}
+                            autoFocus
+                            className="w-full resize-none rounded-md border border-[#4a3d73]/40 bg-[#140f24] px-3 py-2 text-sm text-[#ede9f7] outline-none focus:border-[#8b6fd9]/70"
+                            rows={3}
+                          />
+
+                          <div className="mt-2 flex justify-end gap-2">
                             <button
-                              onClick={() =>
-                                startEditingMessage(message)
-                              }
-                              className="rounded-md px-2 py-1 text-[10px] text-slate-700 hover:bg-black/10"
+                              onClick={cancelEditingMessage}
+                              className="rounded-md px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-[#9a8fbf] hover:bg-white/5"
                             >
-                              Edit
+                              Cancel
                             </button>
 
                             <button
-                              onClick={() =>
-                                requestDeleteMessage(message.id)
-                              }
-                              className="rounded-md px-2 py-1 text-[10px] text-red-700 hover:bg-black/10"
+                              onClick={saveEditedMessage}
+                              disabled={!editingContent.trim()}
+                              className="rounded-md bg-[#8b6fd9] px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-wide text-[#140f24] hover:bg-[#a78bfa] disabled:opacity-40"
                             >
-                              Delete
+                              Save
                             </button>
                           </div>
-                        )}
+                        </div>
+                      ) : (
+                        <div className="flex items-end justify-end gap-2">
+                          {message.imageUrl ? (
+                            <div className="space-y-2">
+                              <img
+                                src={message.imageUrl}
+                                alt={message.imageName ?? "Image"}
+                                className="max-h-96 max-w-full rounded-md object-contain"
+                                loading="lazy"
+                              />
 
-                        {message.deletedAt ? (
-                          <p className="text-sm italic opacity-60">
-                            This message was deleted
-                          </p>
-                        ) : editingMessageId === message.id ? (
-                          <div className="min-w-[240px]">
-                            <textarea
-                              value={editingContent}
-                              onChange={(event) =>
-                                setEditingContent(
-                                  event.target.value
-                                )
-                              }
-                              autoFocus
-                              className="w-full resize-none rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400"
-                              rows={3}
-                            />
-
-                            <div className="mt-2 flex justify-end gap-2">
-                              <button
-                                onClick={cancelEditingMessage}
-                                className="rounded-lg px-3 py-1.5 text-xs text-slate-400 hover:bg-white/10"
-                              >
-                                Cancel
-                              </button>
-
-                              <button
-                                onClick={saveEditedMessage}
-                                disabled={!editingContent.trim()}
-                                className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-50"
-                              >
-                                Save
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-end gap-2">
-                            {message.imageUrl ? (
-                              <div className="space-y-2">
-                                <img
-                                  src={message.imageUrl}
-                                  alt={message.imageName ?? "Image"}
-                                  className="max-h-96 max-w-full rounded-xl object-contain"
-                                  loading="lazy"
-                                />
-
-                                <div className="flex items-end gap-2">
-                                  {message.imageName && (
-                                    <p className="max-w-48 truncate text-xs opacity-60">
-                                      {message.imageName}
-                                    </p>
-                                  )}
-
-                                  {own && (
-                                    <span
-                                      className={`text-[11px] ${message.deliveryStatus === "failed"
-                                        ? "text-red-700"
-                                        : readMessages.has(message.id) ||
-                                          message.readByOtherUser === true
-                                          ? "text-blue-900"
-                                          : "text-slate-700"
-                                        }`}
-                                    >
-                                      {getMessageStatus(message)}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            ) : (
                               <div className="flex items-end gap-2">
-                                <p className="wrap-break-word text-sm">
-                                  {message.content}
-                                </p>
-
-                                {message.editedAt && (
-                                  <span className="shrink-0 text-[10px] opacity-50">
-                                    edited
-                                  </span>
+                                {message.imageName && (
+                                  <p className="max-w-48 truncate text-xs opacity-60">
+                                    {message.imageName}
+                                  </p>
                                 )}
 
                                 {own && (
                                   <span
-                                    className={`text-[11px] ${message.deliveryStatus === "failed"
-                                      ? "text-red-700"
-                                      : readMessages.has(message.id)
-                                        ? "text-blue-900"
-                                        : "text-slate-700"
+                                    className={`font-mono text-[11px] ${message.deliveryStatus === "failed"
+                                      ? "text-[#5c1a3a]"
+                                      : readMessages.has(message.id) || message.readByOtherUser === true
+                                        ? "text-[#2e1f57]"
+                                        : "text-[#140f24]/50"
                                       }`}
-                                    title={
-                                      message.deliveryStatus === "pending" ? "Sending..." : message.deliveryStatus === "failed"
-                                        ? "Failed to send"
-                                        : readMessages.has(message.id) ? "Read" : "Sent"
-                                    }
                                   >
-                                    {message.deliveryStatus === "pending" ? "◷" : message.deliveryStatus === "failed" ? "!" : readMessages.has(message.id)
-                                      ? "✓✓"
-                                      : "✓"}
+                                    {getMessageStatus(message)}
                                   </span>
                                 )}
                               </div>
-                            )}
+                            </div>
+                          ) : (
+                            <div className="flex items-end gap-2">
+                              <p className="wrap-break-word text-sm">
+                                {message.content}
+                              </p>
 
-                          </div>
-                        )}
-                      </div>
+                              {message.editedAt && (
+                                <span className="shrink-0 font-mono text-[10px] opacity-50">
+                                  edited
+                                </span>
+                              )}
+
+                              {own && (
+                                <span
+                                  className={`font-mono text-[11px] ${message.deliveryStatus === "failed"
+                                    ? "text-[#5c1a3a]"
+                                    : readMessages.has(message.id)
+                                      ? "text-[#2e1f57]"
+                                      : "text-[#140f24]/50"
+                                    }`}
+                                  title={
+                                    message.deliveryStatus === "pending"
+                                      ? "Sending..."
+                                      : message.deliveryStatus === "failed"
+                                        ? "Failed to send"
+                                        : readMessages.has(message.id)
+                                          ? "Read"
+                                          : "Sent"
+                                  }
+                                >
+                                  {message.deliveryStatus === "pending"
+                                    ? "◷"
+                                    : message.deliveryStatus === "failed"
+                                      ? "!"
+                                      : readMessages.has(message.id)
+                                        ? "✓✓"
+                                        : "✓"}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  );
-                }
-              )}
+                  </div>
+                );
+              })}
 
-              <div
-                ref={messagesEndRef}
-              />
+              <div ref={messagesEndRef} />
             </div>
           </>
         )}
       </div>
 
       {/* Input */}
-      <div className="border-t border-white/10 p-4">
+      <div className="border-t border-[#4a3d73]/25 p-4">
         <div className="flex gap-3">
           {/* Image picker */}
           <button
             type="button"
             onClick={() => imageInputRef.current?.click()}
-            disabled={!roomReady || uploadingImage}
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={
+              uploadingImage ||
+              (hasRealConversation && !roomReady)
+            }
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-[#4a3d73]/35 bg-[#1e1836] text-[#9a8fbf] transition hover:border-[#8b6fd9]/50 hover:text-[#ede9f7] disabled:cursor-not-allowed disabled:opacity-40"
             title="Send image"
           >
-            🖼️
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <path d="m21 15-5-5L5 21" />
+            </svg>
           </button>
 
           <input
@@ -1711,61 +1825,61 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
 
           <input
             value={content}
-            onChange={(event) =>
-              setContent(event.target.value)
-            }
+            onChange={(event) => setContent(event.target.value)}
             onKeyDown={(event) => {
-              if (
-                event.key === "Enter" &&
-                !event.shiftKey
-              ) {
+              if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 sendMessage();
               }
             }}
             placeholder={
-              roomReady
-                ? "Type a message..."
-                : "Connecting to conversation..."
+              !hasRealConversation ? `Message ${chatUserName}...` : roomReady ? "Type a message..." : "Connecting to conversation..."
             }
-            disabled={!roomReady}
-            className="flex-1 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={hasRealConversation && !roomReady}
+            className="flex-1 rounded-md border border-[#4a3d73]/35 bg-[#140f24] px-4 py-3 text-sm text-[#ede9f7] outline-none placeholder:text-[#6b5f94] focus:border-[#8b6fd9]/60 disabled:cursor-not-allowed disabled:opacity-40"
           />
 
           <button
             onClick={sendMessage}
             disabled={
               !content.trim() ||
-              !roomReady
+              (hasRealConversation && !roomReady)
             }
-            className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-50"
+            className="flex items-center justify-center rounded-md bg-[#8b6fd9] px-5 py-3 text-sm font-semibold text-[#140f24] transition hover:bg-[#a78bfa] disabled:opacity-40"
           >
-            Send
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3 20v-6l8-2-8-2V4l19 8-19 8z" />
+            </svg>
           </button>
         </div>
       </div>
+
       {deleteMessageId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-slate-900 p-6 shadow-2xl">
-            <h3 className="text-lg font-semibold text-white">
+          <div className="w-full max-w-sm rounded-lg border border-[#4a3d73]/35 bg-[#1e1836] p-6 shadow-2xl">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-[#b14c6b]">
+              Confirm delete
+            </p>
+
+            <h3 className="mt-2 text-lg font-semibold text-[#ede9f7]">
               Delete message?
             </h3>
 
-            <p className="mt-2 text-sm leading-6 text-slate-400">
+            <p className="mt-2 text-sm leading-6 text-[#9a8fbf]">
               Message deleted will be deleted for both users.
             </p>
 
             <div className="mt-6 flex justify-end gap-3">
               <button
                 onClick={cancelDeleteMessage}
-                className="rounded-xl border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/5"
+                className="rounded-md border border-[#4a3d73]/35 px-4 py-2 font-mono text-xs uppercase tracking-wide text-[#9a8fbf] transition hover:bg-white/5"
               >
                 Cancel
               </button>
 
               <button
                 onClick={confirmDeleteMessage}
-                className="rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-400"
+                className="rounded-md bg-[#b14c6b] px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-[#c15f80]"
               >
                 Delete
               </button>

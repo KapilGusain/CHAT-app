@@ -70,6 +70,7 @@ export default async function ChatConversationPage({
           conversationId={conversationId}
           currentUserId={session.user.id}
           chatUserName={chatUserName}
+          targetUserId={otherMember?.user.id}
         />
       </div>
     </main>
