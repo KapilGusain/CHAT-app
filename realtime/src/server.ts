@@ -7,7 +7,7 @@ import { Server } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 
 import { connectValkey, pubClient, subClient } from "./redis.js";
-// import { addConnection, removeConnection } from "./presence.js";
+import { addConnection, removeConnection, syncConnections } from "./presence.js";
 import { verifyRealtimeToken, } from "./auth.js";
 
 import { prisma } from "@chat/db";
@@ -150,52 +150,45 @@ const instanceId = process.env.INSTANCE_ID ?? "unknown";
 io.on("connection", async (socket) => {
 
   const userId = socket.data.userId as string;
-
   const userRoom = `user:${userId}`;
-
   await socket.join(userRoom);
 
-  console.log("👤 Socket joined user room:",
-    {
-      userId,
-      socketId: socket.id,
-      room: userRoom,
-    }
-  );
-
-  async function updateUserPresence(
-    userId: string,
-    status: "ONLINE" | "OFFLINE",
-    lastSeenAt: Date | null
-  ) {
-    await prisma.user.update({
-      where: {
-        id: userId,
-      },
-      data: {
-        status,
-        lastSeenAt,
-      },
-    });
-  }
-
+  /*
+ * Presence synchronization.
+ */
   async function syncUserPresence(userId: string) {
     try {
-      const sockets = await io.in(`user:${userId}`).fetchSockets();
+      const sockets = await io
+        .in(`user:${userId}`)
+        .fetchSockets();
 
-      const isOnline = sockets.length > 0;
+      const activeSocketIds = sockets.map(
+        (activeSocket) => activeSocket.id
+      );
+
+      await syncConnections(userId, activeSocketIds);
+
+      const isOnline = activeSocketIds.length > 0;
 
       const lastSeenAt = isOnline ? null : new Date();
 
-      await updateUserPresence(
-        userId,
-        isOnline ? "ONLINE" : "OFFLINE",
-        lastSeenAt
-      );
+      await prisma.user.update({
+        where: {
+          id: userId,
+        },
+        data: {
+          status: isOnline
+            ? "ONLINE"
+            : "OFFLINE",
+          lastSeenAt,
+        },
+      });
 
       io.emit("presence:update", {
         userId,
-        status: isOnline ? "ONLINE" : "OFFLINE",
+        status: isOnline
+          ? "ONLINE"
+          : "OFFLINE",
         lastSeenAt: lastSeenAt
           ? lastSeenAt.toISOString()
           : null,
@@ -205,17 +198,69 @@ io.on("connection", async (socket) => {
         "📡 Presence synchronized:",
         {
           userId,
-          status: isOnline ? "ONLINE" : "OFFLINE",
-          activeSockets: sockets.length,
+          status: isOnline
+            ? "ONLINE"
+            : "OFFLINE",
+          activeSockets:
+            activeSocketIds.length,
+          socketIds: activeSocketIds,
         }
       );
+
+      return {
+        isOnline,
+        connectionCount:
+          activeSocketIds.length,
+        socketIds: activeSocketIds,
+      };
     } catch (error) {
       console.error(
         "Failed to synchronize user presence:",
         error
       );
+
+      throw error;
     }
   }
+
+  const connectionRegistration = addConnection(userId, socket.id);
+
+  void connectionRegistration.then(async () => {
+    try {
+      const presence =
+        await syncUserPresence(userId);
+
+      console.log(
+        "📡 User is now ONLINE:",
+        {
+          userId,
+          socketId: socket.id,
+          activeSockets:
+            presence.connectionCount,
+          socketIds:
+            presence.socketIds,
+        }
+      );
+    } catch (error) {
+      console.error(
+        "Failed to update online presence:",
+        error
+      );
+    }
+  })
+    .catch((error) => {
+      console.error(
+        "Failed to register realtime connection:",
+        error
+      );
+    });
+
+  console.log("👤 Socket joined user room:",
+    {
+      userId,
+      socketId: socket.id,
+      room: userRoom,
+    });
 
   /*
    * SEND MESSAGE
@@ -413,26 +458,26 @@ io.on("connection", async (socket) => {
       const isFirstMessage = !existingMessage;
 
       const message = await prisma.message.create({
-          data: {
-            conversationId,
-            senderId: userId,
-            content,
-            imageUrl,
-            imageName,
-            imageSize,
-            imageMimeType,
-          },
+        data: {
+          conversationId,
+          senderId: userId,
+          content,
+          imageUrl,
+          imageName,
+          imageSize,
+          imageMimeType,
+        },
 
-          include: {
-            sender: {
-              select: {
-                id: true,
-                username: true,
-                avatarUrl: true,
-              },
+        include: {
+          sender: {
+            select: {
+              id: true,
+              username: true,
+              avatarUrl: true,
             },
           },
-        });
+        },
+      });
 
       /*
        * Update conversation timestamp.
@@ -811,7 +856,6 @@ io.on("connection", async (socket) => {
 
   /*
  * DELETE MESSAGE
- * Deletes message for both users.
  */
 
   socket.on("message:delete",
@@ -1042,26 +1086,72 @@ io.on("connection", async (socket) => {
   /*
    * DISCONNECT
    */
+  
   socket.on("disconnect", async (reason) => {
-    console.log(`🟠 User ${userId} disconnected`,
-      { socketId: socket.id, reason, instanceId }
-    );
+      console.log(
+        `🟠 User ${userId} disconnected`,
+        {
+          socketId: socket.id,
+          reason,
+          instanceId,
+        }
+      );
 
-    try {
-      await syncUserPresence(userId);
+      try {
+        /*
+         * Make sure this socket was registered before
+         * attempting to remove it.
+         */
+        await connectionRegistration;
 
-    } catch (error) {
-      console.error("Failed to remove realtime connection:", error);
+        /*
+         * Remove this socket from Valkey.
+         */
+        await removeConnection(
+          userId,
+          socket.id
+        );
+
+        /*
+         * IMPORTANT:
+         * Socket.IO is now authoritative.
+         *
+         * This detects:
+         * - stale Valkey socket IDs
+         * - sockets on another realtime instance
+         * - multiple tabs/devices
+         */
+        const presence =
+          await syncUserPresence(
+            userId
+          );
+
+        console.log(
+          "📡 Disconnect presence result:",
+          {
+            userId,
+            disconnectedSocketId:
+              socket.id,
+            remainingConnections:
+              presence.connectionCount,
+            remainingSocketIds:
+              presence.socketIds,
+            status: presence.isOnline
+              ? "ONLINE"
+              : "OFFLINE",
+          }
+        );
+      } catch (error) {
+        console.error(
+          "Failed to synchronize disconnect presence:",
+          error
+        );
+      }
     }
-  });
-
-  /*  CONNECTION PRESENCE */
-
-  await syncUserPresence(userId);
+  );
 
 }
 );
-
 
 const PORT = Number(process.env.PORT) || 4000;
 
@@ -1069,23 +1159,17 @@ async function startServer() {
   try {
     await connectValkey();
 
-    io.adapter(
-      createAdapter(
-        pubClient,
-        subClient
-      )
+    io.adapter(createAdapter(
+      pubClient,
+      subClient
+    )
     );
 
-    console.log(
-      "✓ Socket.IO Valkey adapter enabled"
-    );
+    console.log("✓ Socket.IO Valkey adapter enabled");
 
-    httpServer.listen(
-      PORT,
+    httpServer.listen(PORT,
       () => {
-        console.log(
-          `🚀 Realtime server running on port ${PORT}`
-        );
+        console.log(`🚀 Realtime server running on port ${PORT}`);
       }
     );
   } catch (error) {

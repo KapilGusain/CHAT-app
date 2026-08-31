@@ -1,37 +1,42 @@
 "use client";
 
-import {
-  useEffect,
-  useState,
-} from "react";
-
-import { getSocket } from "@/lib/socket";
+import { useEffect, useState } from "react";
+import {getSocket, disconnectSocket } from "@/lib/socket";
+import type { Socket } from "socket.io-client";
 
 interface SocketProviderProps {
   children: React.ReactNode;
 }
 
-export function SocketProvider({
-  children,
-}: SocketProviderProps) {
+let providerGeneration = 0;
+
+export function SocketProvider({ children }: SocketProviderProps) {
   const [status, setStatus] =
     useState<
       "connecting" | "connected" | "disconnected" | "error"
     >("connecting");
 
   useEffect(() => {
+    const generation = ++providerGeneration;
+
     let mounted = true;
+    let providerSocket: Socket | null = null;
 
     async function connectSocket() {
       try {
-        const socket =
-          await getSocket();
+        const socket = await getSocket();
 
-        if (!mounted) {
+        if (!mounted || generation !== providerGeneration) {
           return;
         }
 
+        providerSocket = socket;
+
         const handleConnect = () => {
+          if (!mounted || generation !== providerGeneration) {
+            return;
+          }
+
           console.log(
             "🟢 Socket connected:",
             socket.id
@@ -43,6 +48,13 @@ export function SocketProvider({
         const handleConnectError = (
           error: Error
         ) => {
+          if (
+            !mounted ||
+            generation !== providerGeneration
+          ) {
+            return;
+          }
+
           console.error(
             "🔴 Socket connection error:",
             error.message
@@ -54,6 +66,13 @@ export function SocketProvider({
         const handleDisconnect = (
           reason: string
         ) => {
+          if (
+            !mounted ||
+            generation !== providerGeneration
+          ) {
+            return;
+          }
+
           console.log(
             "🟠 Socket disconnected:",
             reason
@@ -77,13 +96,31 @@ export function SocketProvider({
           handleDisconnect
         );
 
+        /*
+         * The provider is the only component that
+         * starts the shared realtime connection.
+         */
         if (socket.connected) {
           setStatus("connected");
+
+          console.log(
+            "🟢 Socket already connected:",
+            socket.id
+          );
         } else {
           setStatus("connecting");
+
+          console.log(
+            "🟡 SocketProvider connecting socket..."
+          );
+
           socket.connect();
         }
 
+        /*
+         * Return listener cleanup for this
+         * provider lifecycle.
+         */
         return () => {
           socket.off(
             "connect",
@@ -101,27 +138,55 @@ export function SocketProvider({
           );
         };
       } catch (error) {
+        if (
+          !mounted ||
+          generation !== providerGeneration
+        ) {
+          return;
+        }
+
         console.error(
           "❌ Failed to initialize socket:",
           error
         );
 
-        if (mounted) {
-          setStatus("error");
-        }
+        setStatus("error");
       }
     }
 
-    const cleanupPromise =
-      connectSocket();
+    let listenerCleanup:
+      (() => void) | undefined;
+
+    void connectSocket().then((cleanup) => {
+      /*
+       * If the provider was cleaned up while
+       * initialization was still running, immediately
+       * clean only the listeners from that lifecycle.
+       */
+      if (
+        !mounted ||
+        generation !== providerGeneration
+      ) {
+        cleanup?.();
+        return;
+      }
+
+      listenerCleanup = cleanup;
+    });
 
     return () => {
       mounted = false;
 
-      cleanupPromise.then(
-        (cleanup) => {
-          cleanup?.();
-        }
+      if (
+        generation !== providerGeneration
+      ) {
+        return;
+      }
+
+      listenerCleanup?.();
+
+      disconnectSocket(
+        providerSocket ?? undefined
       );
     };
   }, []);

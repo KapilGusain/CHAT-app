@@ -525,15 +525,17 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
 
         if (socket.connected) {
           setSocketReady(true);
-
           await joinCurrentConversation();
+          
         } else {
           setSocketReady(false);
 
           roomReadyRef.current = false;
           setRoomReady(false);
 
-          socket.connect();
+          console.log(
+            "🟡 ChatWindow waiting for SocketProvider connection..."
+          );
         }
       } catch (error) {
         console.error(

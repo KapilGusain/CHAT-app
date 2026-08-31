@@ -1,80 +1,77 @@
-// import { pubClient } from "./redis.js";
+import { pubClient } from "./redis.js";
 
-// function connectionKey(userId: string) {
-//   return `user:${userId}:connections`;
-// }
+function connectionKey(userId: string) {
+  return `user:${userId}:connections`;
+}
 
-// /*
-//  * A Set is used so the same socket ID cannot be accidentally counted twice.
-//  */
-// export async function addConnection(
-//   userId: string,
-//   socketId: string
-// ) {
-//   const key = connectionKey(userId);
+export async function addConnection(
+  userId: string,
+  socketId: string
+) {
+  const key = connectionKey(userId);
 
-//   await pubClient.sAdd(key, socketId);
+  await pubClient.sAdd(key, socketId);
+  await pubClient.expire(key, 60 * 60 * 24);
 
-//   /*
-//    * This protects against stale keys if a server crashes without receiving the disconnect event.
-//    */
-//   await pubClient.expire(key, 60 * 60 * 24);
+  return {
+    userId,
+    socketId,
+  };
+}
 
-//   return {
-//     userId,
-//     socketId,
-//     online: true,
-//   };
-// }
+export async function removeConnection(userId: string, socketId: string) {
+  const key = connectionKey(userId);
 
-// /*
-//  * The user only becomes offline when there are no remaining active sockets.
-//  */
-// export async function removeConnection(
-//   userId: string,
-//   socketId: string
-// ) {
-//   const key = connectionKey(userId);
+  await pubClient.sRem(key, socketId);
+  const connectionCount = await pubClient.sCard(key);
 
-//   await pubClient.sRem(key, socketId);
+  if (connectionCount === 0) {
+    await pubClient.del(key);
+    return {
+      connectionCount: 0,
+    };
+  }
 
-//   const count = await pubClient.sCard(key);
+  return {
+    connectionCount,
+  };
+}
 
-//   if (count === 0) {
-//     await pubClient.del(key);
+/*
+ * Synchronize Valkey with the ACTUAL Socket.IO connections.
+ */
+export async function syncConnections(userId: string, activeSocketIds: string[]) {
+  const key = connectionKey(userId);
 
-//     return {
-//       online: false,
-//       connectionCount: 0,
-//     };
-//   }
+  if (activeSocketIds.length === 0) {
+    await pubClient.del(key);
 
-//   return {
-//     online: true,
-//     connectionCount: count,
-//   };
-// }
+    return {
+      connectionCount: 0,
+    };
+  }
 
-// /*
-//  * Check whether a user currently has at least one active realtime connection.
-//  */
-// export async function isUserOnline(
-//   userId: string
-// ) {
-//   const key = connectionKey(userId);
+  await pubClient.del(key);
+  await pubClient.sAdd(key, activeSocketIds);
+  await pubClient.expire(key, 60 * 60 * 24);
 
-//   const count = await pubClient.sCard(key);
+  return {
+    connectionCount: activeSocketIds.length,
+  };
+}
 
-//   return count > 0;
-// }
+export async function isUserOnline(
+  userId: string
+) {
+  const key = connectionKey(userId);
 
-// /*
-//  * Get the number of active connections.
-//  */
-// export async function getConnectionCount(
-//   userId: string
-// ) {
-//   const key = connectionKey(userId);
+  const count = await pubClient.sCard(key);
 
-//   return pubClient.sCard(key);
-// }
+  return count > 0;
+}
+
+export async function getConnectionCount( userId: string ) {
+  const key = connectionKey(userId);
+
+  return pubClient.sCard(key);
+}

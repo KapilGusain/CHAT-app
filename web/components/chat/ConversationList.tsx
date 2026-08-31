@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { getSocket, disconnectSocket } from "@/lib/socket";
+import { getSocket } from "@/lib/socket";
 import type { Socket } from "socket.io-client";
 import { signOut } from "next-auth/react";
 
@@ -457,10 +457,6 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
 
         socket.on("conversation:new", handleConversationNew);
 
-        if (!socket.connected) {
-          socket.connect();
-        }
-
         return () => {
           socket?.off("connect", handleConnect);
 
@@ -700,7 +696,7 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
         <div className="border-t border-white/10 p-4">
           <button onClick={async () => {
 
-            disconnectSocket();
+            // disconnectSocket();
             await signOut({
               callbackUrl: "/login",
             });

@@ -16,7 +16,10 @@ async function fetchRealtimeToken(): Promise<string> {
         "You must be signed in to connect to realtime services"
       );
     }
-    throw new Error(`Failed to obtain realtime token (${response.status})`);
+
+    throw new Error(
+      `Failed to obtain realtime token (${response.status})`
+    );
   }
 
   const data: { token?: string } = await response.json();
@@ -41,6 +44,7 @@ export async function getSocket(): Promise<Socket> {
 
   try {
     socket = await socketPromise;
+
     return socket;
   } catch (error) {
     socketPromise = null;
@@ -49,11 +53,9 @@ export async function getSocket(): Promise<Socket> {
 }
 
 async function initializeSocket(): Promise<Socket> {
-  
   await fetchRealtimeToken();
 
-  const socketUrl =
-    process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:5000";
+  const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:5000";
 
   return io(socketUrl, {
     autoConnect: false,
@@ -61,24 +63,40 @@ async function initializeSocket(): Promise<Socket> {
     auth: async (callback) => {
       try {
         const token = await fetchRealtimeToken();
-        callback({ token });
+
+        callback({
+          token,
+        });
       } catch (error) {
-        console.error("Failed to refresh realtime token:", error);
-        callback({}); // let the server reject cleanly
+        console.error(
+          "Failed to refresh realtime token:",
+          error
+        );
+
+        callback({});
       }
     },
 
     withCredentials: true,
+
     transports: ["websocket"],
   });
 }
 
-export function disconnectSocket() {
-  if (!socket) {
+export function disconnectSocket( expectedSocket?: Socket ) {
+  const currentSocket = socket;
+
+  if (!currentSocket) {
     return;
   }
 
-  socket.disconnect();
+  if (expectedSocket && currentSocket !== expectedSocket) {
+    return;
+  }
+
   socket = null;
   socketPromise = null;
+
+  currentSocket.removeAllListeners();
+  currentSocket.disconnect();
 }
