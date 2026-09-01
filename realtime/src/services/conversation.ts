@@ -16,7 +16,7 @@ export async function isConversationMember(conversationId: string, userId: strin
   });
 
   if (!conversation) {
-    console.log("❌ Conversation does not exist");
+    console.log(" Conversation does not exist");
     return false;
   }
 

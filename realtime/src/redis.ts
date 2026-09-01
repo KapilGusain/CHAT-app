@@ -21,9 +21,6 @@ export const pubClient = createClient({
 
 export const subClient = pubClient.duplicate();
 
-/*
- * Valkey connection errors
- */
 pubClient.on("error", (error) => {
   console.error("Valkey publisher error:", error);
 });
@@ -33,7 +30,7 @@ subClient.on("error", (error) => {
 });
 
 /*
- * Connection lifecycle logging
+ * Connection lifecycle
  */
 pubClient.on("connect", () => {
   console.log("🔌 Valkey publisher connecting...");

@@ -38,7 +38,7 @@ export async function removeConnection(userId: string, socketId: string) {
 }
 
 /*
- * Synchronize Valkey with the ACTUAL Socket.IO connections.
+ * Synchronize Valkey with Socket.io
  */
 export async function syncConnections(userId: string, activeSocketIds: string[]) {
   const key = connectionKey(userId);

@@ -195,14 +195,10 @@ io.on("connection", async (socket) => {
       });
 
       console.log(
-        "📡 Presence synchronized:",
-        {
+        "📡 Presence synchronized:", {
           userId,
-          status: isOnline
-            ? "ONLINE"
-            : "OFFLINE",
-          activeSockets:
-            activeSocketIds.length,
+          status: isOnline ? "ONLINE" : "OFFLINE",
+          activeSockets: activeSocketIds.length,
           socketIds: activeSocketIds,
         }
       );
@@ -227,18 +223,15 @@ io.on("connection", async (socket) => {
 
   void connectionRegistration.then(async () => {
     try {
-      const presence =
-        await syncUserPresence(userId);
+      const presence = await syncUserPresence(userId);
 
       console.log(
         "📡 User is now ONLINE:",
         {
           userId,
           socketId: socket.id,
-          activeSockets:
-            presence.connectionCount,
-          socketIds:
-            presence.socketIds,
+          activeSockets: presence.connectionCount,
+          socketIds: presence.socketIds,
         }
       );
     } catch (error) {
@@ -253,13 +246,6 @@ io.on("connection", async (socket) => {
         "Failed to register realtime connection:",
         error
       );
-    });
-
-  console.log("👤 Socket joined user room:",
-    {
-      userId,
-      socketId: socket.id,
-      room: userRoom,
     });
 
   /*
@@ -349,15 +335,9 @@ io.on("connection", async (socket) => {
         });
       }
 
-      /*
-       * Determine message type.
-       */
       const hasText = Boolean(content);
       const hasImage = Boolean(imageUrl);
 
-      /*
-       * A message must contain something.
-       */
       if (!hasText && !hasImage) {
         return callback?.({
           success: false,
@@ -365,10 +345,6 @@ io.on("connection", async (socket) => {
         });
       }
 
-      /*
-       * Currently we support either text OR image.
-       * Captions can be added later.
-       */
       if (hasText && hasImage) {
         return callback?.({
           success: false,
@@ -376,9 +352,6 @@ io.on("connection", async (socket) => {
         });
       }
 
-      /*
-       * Text validation
-       */
       if (hasText && content && content.length > 5000) {
         return callback?.({
           success: false,
@@ -386,9 +359,6 @@ io.on("connection", async (socket) => {
         });
       }
 
-      /*
-       * Image validation
-       */
       if (hasImage) {
         const allowedImageTypes = [
           "image/jpeg",
@@ -426,9 +396,6 @@ io.on("connection", async (socket) => {
         }
       }
 
-      /*
-       * Verify conversation membership.
-       */
       const member = await isConversationMember(
         conversationId,
         userId
@@ -442,9 +409,6 @@ io.on("connection", async (socket) => {
         });
       }
 
-      /*
-       * Persist the message.
-       */
       const existingMessage =
         await prisma.message.findFirst({
           where: {
@@ -493,7 +457,7 @@ io.on("connection", async (socket) => {
       });
 
       /*
-       * Get conversation members.
+       * Get conversation members
        */
       const conversation = await prisma.conversation.findUnique({
         where: {
@@ -532,7 +496,7 @@ io.on("connection", async (socket) => {
       }
 
       /*
-       * Create the exact payload sent to clients.
+       * Create same payload sent to clients
        */
       const messagePayload = {
         id: message.id,
@@ -587,16 +551,8 @@ io.on("connection", async (socket) => {
 
       const room = `conversation:${conversationId}`;
 
-      /*
-       * Broadcast to everyone currently inside
-       * the conversation.
-       */
       io.to(room).emit("message:new", messagePayload);
 
-      /*
-       * Notify conversation members through
-       * their user rooms.
-       */
       for (const member of conversation.members) {
         if (member.userId === userId) {
           continue;
@@ -623,7 +579,7 @@ io.on("connection", async (socket) => {
       }
 
       /*
-       * Acknowledge persistence to sender.
+       * Acknowledge persistence to sender
        */
       callback?.({
         success: true,
@@ -755,9 +711,6 @@ io.on("connection", async (socket) => {
         userId
       );
 
-      /*
-       * Notify this user's other tabs/windows.
-       */
       io.to(`user:${userId}`).emit("conversation:read",
         {
           conversationId,
@@ -1098,29 +1051,13 @@ io.on("connection", async (socket) => {
       );
 
       try {
-        /*
-         * Make sure this socket was registered before
-         * attempting to remove it.
-         */
         await connectionRegistration;
 
-        /*
-         * Remove this socket from Valkey.
-         */
         await removeConnection(
           userId,
           socket.id
         );
 
-        /*
-         * IMPORTANT:
-         * Socket.IO is now authoritative.
-         *
-         * This detects:
-         * - stale Valkey socket IDs
-         * - sockets on another realtime instance
-         * - multiple tabs/devices
-         */
         const presence =
           await syncUserPresence(
             userId
@@ -1130,15 +1067,10 @@ io.on("connection", async (socket) => {
           "📡 Disconnect presence result:",
           {
             userId,
-            disconnectedSocketId:
-              socket.id,
-            remainingConnections:
-              presence.connectionCount,
-            remainingSocketIds:
-              presence.socketIds,
-            status: presence.isOnline
-              ? "ONLINE"
-              : "OFFLINE",
+            disconnectedSocketId: socket.id,
+            remainingConnections: presence.connectionCount,
+            remainingSocketIds: presence.socketIds,
+            status: presence.isOnline ? "ONLINE" : "OFFLINE",
           }
         );
       } catch (error) {

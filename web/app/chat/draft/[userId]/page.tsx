@@ -1,9 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import {
-  notFound,
-  redirect,
-} from "next/navigation";
+import {notFound, redirect} from "next/navigation";
 
 import ChatWindow from "@/components/chat/ChatWindow";
 
@@ -49,11 +46,6 @@ export default async function DraftChatPage({
     notFound();
   }
 
-  /*
-   * Double-check whether a conversation already
-   * exists. This protects against two tabs or
-   * another process creating it meanwhile.
-   */
   const directKey = [
     session.user.id,
     user.id,

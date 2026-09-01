@@ -133,9 +133,6 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
             return;
           }
 
-          /*
-           * Leave previously joined conversation first.
-           */
           const previousConversationId =
             joinedConversationIdRef.current;
 
@@ -172,7 +169,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
             );
           } catch (error) {
             console.error(
-              "❌ Failed to join conversation:",
+              " Failed to join conversation:",
               error
             );
 
@@ -192,7 +189,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           }
 
           console.log(
-            "🟢 ChatWindow socket connected:",
+            " ChatWindow socket connected:",
             socket.id
           );
 
@@ -215,7 +212,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           }
 
           console.log(
-            "🟠 ChatWindow socket disconnected:",
+            " ChatWindow socket disconnected:",
             reason
           );
 
@@ -236,14 +233,12 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           }
 
           console.error(
-            "🔴 ChatWindow socket connection error:",
+            " ChatWindow socket connection error:",
             error.message
           );
 
           setSocketReady(false);
-
-          joinedConversationIdRef.current =
-            null;
+          joinedConversationIdRef.current = null;
 
           roomReadyRef.current = false;
           setRoomReady(false);
@@ -278,9 +273,6 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
               return previousMessages;
             }
 
-            /*
-             * Reconcile optimistic message.
-             */
             if (
               message.senderId ===
               currentUserId
@@ -348,11 +340,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           userId: string;
           readAt: string;
         }) => {
-          if (
-            !mounted ||
-            data.conversationId !==
-            activeConversationIdRef.current
-          ) {
+          if (!mounted || data.conversationId !== activeConversationIdRef.current) {
             return;
           }
 
@@ -360,9 +348,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
             const next = new Set(previous);
 
             next.add(data.messageId);
-
-            readMessagesRef.current =
-              next;
+            readMessagesRef.current = next;
 
             return next;
           });
@@ -373,11 +359,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           conversationId: string;
           deletedAt: string;
         }) => {
-          if (
-            !mounted ||
-            data.conversationId !==
-            activeConversationIdRef.current
-          ) {
+          if (!mounted || data.conversationId !== activeConversationIdRef.current) {
             return;
           }
 
@@ -405,11 +387,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           deletedAt: string | null;
           editedAt: string | null;
         }) => {
-          if (
-            !mounted ||
-            data.conversationId !==
-            activeConversationIdRef.current
-          ) {
+          if (!mounted || data.conversationId !== activeConversationIdRef.current) {
             return;
           }
 
@@ -418,14 +396,10 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
               message.id === data.id
                 ? {
                   ...message,
-                  content:
-                    data.content,
-                  updatedAt:
-                    data.updatedAt,
-                  editedAt:
-                    data.editedAt,
-                  deletedAt:
-                    data.deletedAt,
+                  content: data.content,
+                  updatedAt: data.updatedAt,
+                  editedAt: data.editedAt,
+                  deletedAt: data.deletedAt,
                 }
                 : message
             )
@@ -534,12 +508,12 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           setRoomReady(false);
 
           console.log(
-            "🟡 ChatWindow waiting for SocketProvider connection..."
+            " ChatWindow waiting for SocketProvider connection..."
           );
         }
       } catch (error) {
         console.error(
-          "❌ Failed to initialize chat socket:",
+          " Failed to initialize chat socket:",
           error
         );
 
@@ -681,7 +655,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           messageId
         );
 
-        console.error("❌ Failed to mark message as read:",
+        console.error(" Failed to mark message as read:",
           {
             messageId,
             error: response.error,
@@ -689,7 +663,6 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
         );
         return;
       }
-      console.log("📖 Message marked as read:", messageId);
     }
     );
   }
@@ -717,7 +690,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
       (response: SocketResponse) => {
         if (!response.success) {
           console.error(
-            "❌ Failed to delete message:",
+            " Failed to delete message:",
             response.error
           );
           return;
@@ -766,7 +739,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
       (response: SocketResponse) => {
         if (!response.success) {
           console.error(
-            "❌ Failed to edit message:",
+            " Failed to edit message:",
             response.error
           );
           return;
@@ -932,10 +905,6 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
         data.hasMore === true
       );
 
-      /*
-       * Restore the user's visual position
-       * after the older messages are inserted.
-       */
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           const currentContainer = messagesContainerRef.current;
@@ -1047,14 +1016,8 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
     try {
       setUploadingImage(true);
 
-      console.log("🖼️ Selected image:", {
-        name: file.name,
-        size: file.size,
-        type: file.type,
-      });
-
       /*
-       * Upload image to Next.js API.
+       * Upload image to Nextjs API
        */
       const formData = new FormData();
 
@@ -1085,10 +1048,6 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
         );
       }
 
-      console.log(
-        "✅ Image uploaded successfully"
-      );
-
       const socket =
         socketRef.current;
 
@@ -1101,16 +1060,10 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
         );
       }
 
-      /*
-       * Create optimistic ID.
-       */
       const optimisticId = `optimistic-image-${resolvedConversationId}-${Date.now()}-${Math.random()
         .toString(36)
         .slice(2)}`;
 
-      /*
-       * Show image immediately.
-       */
       const optimisticMessage: Message = {
         id: optimisticId,
         conversationId: resolvedConversationId,
@@ -1143,10 +1096,6 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
         ]
       );
 
-      /*
-       * Send the persisted image metadata
-       * through Socket.IO.
-       */
       socket.emit("send_message", {
         conversationId: resolvedConversationId,
         content: null,
@@ -1158,7 +1107,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
       },
         (response: SocketResponse) => {
           if (!response.success || !response.message) {
-            console.error("❌ Failed to send image message:",
+            console.error(" Failed to send image message:",
               response.error
             );
 
@@ -1180,8 +1129,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           }
 
           /*
-           * Replace optimistic message
-           * with the actual DB message.
+           * Replace optimistic message with  actual DB message.
            */
           setMessages(
             (previousMessages) =>
@@ -1201,7 +1149,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
 
     } catch (error) {
       console.error(
-        "❌ Failed to upload/send image:",
+        " Failed to upload/send image:",
         error
       );
     } finally {
@@ -1349,14 +1297,11 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
 
       const optimisticMessage: Message = {
         id: optimisticId,
-        conversationId:
-          resolvedConversationId,
+        conversationId: resolvedConversationId,
         senderId: currentUserId,
         content: trimmed,
-        createdAt:
-          new Date().toISOString(),
-        updatedAt:
-          new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         deletedAt: null,
         editedAt: null,
 
@@ -1365,7 +1310,6 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           username: "You",
           avatarUrl: null,
         },
-
         deliveryStatus: "pending",
       };
 
@@ -1393,7 +1337,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
             !response.message
           ) {
             console.error(
-              "❌ Failed to send message:",
+              " Failed to send message:",
               response.error
             );
 
@@ -1430,11 +1374,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
               )
           );
 
-          window.history.replaceState(
-            null,
-            "",
-            `/chat/${response.message!.conversationId}`
-          );
+          window.history.replaceState(null, "", `/chat/${response.message!.conversationId}`);
         }
       );
     } catch (error) {
@@ -1447,10 +1387,10 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
 
   return (
     <div className="flex h-150 flex-col overflow-hidden rounded-lg border border-[#4a3d73]/25 bg-[#140f24] shadow-[0_0_0_1px_rgba(0,0,0,0.4)]">
-      {/* Signal strip */}
-      <div className="h-[3px] w-full bg-gradient-to-r from-[#8b6fd9] via-[#8b6fd9]/40 to-transparent" />
+      
+      <div className="h-0.75 w-full bg-linear-to-r from-[#8b6fd9] via-[#8b6fd9]/40 to-transparent" />
 
-      {/* Header */}
+      
       <div className="relative border-b border-[#4a3d73]/25 px-5 py-4">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
@@ -1468,7 +1408,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           </div>
 
           <div className="flex shrink-0 items-center gap-4">
-            {/* Search button */}
+            
             <button
               type="button"
               onClick={() => {
@@ -1488,12 +1428,11 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
               </svg>
             </button>
 
-            {/* Connection signal bars */}
             <div className="flex items-center gap-2">
-              <div className="flex items-end gap-[3px]" title={roomReady ? "Live" : socketReady ? "Joining" : "Offline"}>
-                <span className={`h-2 w-[3px] rounded-sm ${roomReady || socketReady ? "bg-[#8b6fd9]" : "bg-[#b14c6b]"}`} />
-                <span className={`h-3 w-[3px] rounded-sm ${roomReady ? "bg-[#8b6fd9]" : socketReady ? "bg-[#8b6fd9]/40" : "bg-[#b14c6b]/30"}`} />
-                <span className={`h-4 w-[3px] rounded-sm ${roomReady ? "bg-[#8b6fd9]" : "bg-[#4a3d73]/30"}`} />
+              <div className="flex items-end gap-0.75" title={roomReady ? "Live" : socketReady ? "Joining" : "Offline"}>
+                <span className={`h-2 w-0.75 rounded-sm ${roomReady || socketReady ? "bg-[#8b6fd9]" : "bg-[#b14c6b]"}`} />
+                <span className={`h-3 w-0.75 rounded-sm ${roomReady ? "bg-[#8b6fd9]" : socketReady ? "bg-[#8b6fd9]/40" : "bg-[#b14c6b]/30"}`} />
+                <span className={`h-4 w-0.75 rounded-sm ${roomReady ? "bg-[#8b6fd9]" : "bg-[#4a3d73]/30"}`} />
               </div>
 
               <span className="font-mono text-[10px] uppercase tracking-widest text-[#9a8fbf]">
@@ -1503,7 +1442,6 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           </div>
         </div>
 
-        {/* Search */}
         {searchOpen && (
           <div className="mt-4">
             <div className="flex gap-2">
@@ -1572,7 +1510,6 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
               </button>
             </div>
 
-            {/* Search results */}
             {searchPerformed && (
               <div className="mt-3 max-h-64 overflow-y-auto rounded-md border border-[#4a3d73]/30 bg-[#140f24] shadow-xl">
                 {searchResults.length === 0 ? (
@@ -1613,7 +1550,6 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
         )}
       </div>
 
-      {/* Messages */}
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-5">
         {loading ? (
           <p className="font-mono text-xs uppercase tracking-widest text-[#9a8fbf]">
@@ -1796,10 +1732,8 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
         )}
       </div>
 
-      {/* Input */}
       <div className="border-t border-[#4a3d73]/25 p-4">
         <div className="flex gap-3">
-          {/* Image picker */}
           <button
             type="button"
             onClick={() => imageInputRef.current?.click()}

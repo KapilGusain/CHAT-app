@@ -11,10 +11,7 @@ interface SocketProviderProps {
 let providerGeneration = 0;
 
 export function SocketProvider({ children }: SocketProviderProps) {
-  const [status, setStatus] =
-    useState<
-      "connecting" | "connected" | "disconnected" | "error"
-    >("connecting");
+  const [status, setStatus] = useState<"connecting" | "connected" | "disconnected" | "error">("connecting");
 
   useEffect(() => {
     const generation = ++providerGeneration;
@@ -38,7 +35,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
           }
 
           console.log(
-            "🟢 Socket connected:",
+            " Socket connected:",
             socket.id
           );
 
@@ -56,7 +53,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
           }
 
           console.error(
-            "🔴 Socket connection error:",
+            " Socket connection error:",
             error.message
           );
 
@@ -74,7 +71,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
           }
 
           console.log(
-            "🟠 Socket disconnected:",
+            " Socket disconnected:",
             reason
           );
 
@@ -96,31 +93,23 @@ export function SocketProvider({ children }: SocketProviderProps) {
           handleDisconnect
         );
 
-        /*
-         * The provider is the only component that
-         * starts the shared realtime connection.
-         */
         if (socket.connected) {
           setStatus("connected");
 
           console.log(
-            "🟢 Socket already connected:",
+            " Socket already connected:",
             socket.id
           );
         } else {
           setStatus("connecting");
 
           console.log(
-            "🟡 SocketProvider connecting socket..."
+            " SocketProvider connecting socket..."
           );
 
           socket.connect();
         }
 
-        /*
-         * Return listener cleanup for this
-         * provider lifecycle.
-         */
         return () => {
           socket.off(
             "connect",
@@ -146,7 +135,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
         }
 
         console.error(
-          "❌ Failed to initialize socket:",
+          " Failed to initialize socket:",
           error
         );
 
@@ -158,11 +147,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
       (() => void) | undefined;
 
     void connectSocket().then((cleanup) => {
-      /*
-       * If the provider was cleaned up while
-       * initialization was still running, immediately
-       * clean only the listeners from that lifecycle.
-       */
+      
       if (
         !mounted ||
         generation !== providerGeneration
@@ -177,17 +162,12 @@ export function SocketProvider({ children }: SocketProviderProps) {
     return () => {
       mounted = false;
 
-      if (
-        generation !== providerGeneration
-      ) {
+      if (generation !== providerGeneration) {
         return;
       }
 
       listenerCleanup?.();
-
-      disconnectSocket(
-        providerSocket ?? undefined
-      );
+      disconnectSocket(providerSocket ?? undefined);
     };
   }, []);
 
@@ -197,7 +177,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
 
       {process.env.NODE_ENV ===
         "development" && (
-        <div className="pointer-events-none fixed bottom-4 right-4 z-[9999]">
+        <div className="pointer-events-none fixed bottom-4 right-4 z-9999">
           <div className="flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/90 px-3 py-2 text-xs text-white shadow-xl backdrop-blur">
             <span
               className={`h-2 w-2 rounded-full ${
@@ -212,7 +192,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
             />
 
             <span className="capitalize text-slate-300">
-              Realtime: {status}
+              My Status: {status}
             </span>
           </div>
         </div>

@@ -29,7 +29,7 @@ export default function RegisterPage() {
                 throw new Error(data?.message ?? "Registration failed");
             }
 
-            router.push("chat");
+            router.push("/chat");
         } catch (err) {
             setError(err instanceof Error ? err.message : "Something went wrong");
         } finally {

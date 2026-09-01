@@ -19,7 +19,7 @@ export async function markMessageAsRead(
     throw new Error("Message not found");
   }
 
-  // Don't mark your own message as read
+  // Dont mark own message as read
   if (message.senderId === userId) {
     return null;
   }

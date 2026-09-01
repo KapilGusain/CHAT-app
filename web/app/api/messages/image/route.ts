@@ -28,16 +28,13 @@ export async function POST(request: Request) {
       );
     }
 
-    /*
-     * Read multipart form data
-     */
     const formData = await request.formData();
 
     const file = formData.get("file");
     const conversationId = formData.get("conversationId");
 
     /*
-     * Validate file
+      validate file
      */
     if (!(file instanceof File)) {
       return NextResponse.json(
@@ -50,11 +47,7 @@ export async function POST(request: Request) {
     }
 
     /*
-     * Validate conversation ID.
-     *
-     * This route expects the conversation to already exist.
-     * For a brand-new chat, ChatWindow must first call
-     * /api/conversations/direct and then use that returned ID.
+     * Validate conversation ID
      */
     if (typeof conversationId !== "string" || !conversationId.trim()) {
       return NextResponse.json(
@@ -69,9 +62,6 @@ export async function POST(request: Request) {
     const normalizedConversationId =
       conversationId.trim();
 
-    /*
-     * Verify conversation membership.
-     */
     const membership =
       await prisma.conversationMember.findUnique({
         where: {
@@ -97,9 +87,6 @@ export async function POST(request: Request) {
       );
     }
 
-    /*
-     * Validate MIME type
-     */
     if (!ALLOWED_TYPES.includes(file.type as any)) {
       return NextResponse.json(
         {
@@ -109,10 +96,7 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-
-    /*
-     * Validate file size
-     */
+ 
     if (file.size <= 0) {
       return NextResponse.json(
         {
@@ -135,41 +119,26 @@ export async function POST(request: Request) {
     }
 
     /*
-     * Generate a safe random storage filename.
-     *
-     * Never use the original filename as the
-     * actual Supabase object name.
+      Generate random storage filename
      */
-    const extension =
-      file.name
-        .split(".")
-        .pop()
-        ?.toLowerCase() || "jpg";
+    const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
 
-    const fileName =
-      `${crypto.randomUUID()}.${extension}`;
+    const fileName = `${crypto.randomUUID()}.${extension}`;
 
     /*
-     * Storage structure:
-     *
-     * conversationId/
-     *   userId/
-     *     random-file-name.ext
+     * Storage structure
      */
-    const storagePath =
-      `${normalizedConversationId}/${session.user.id}/${fileName}`;
+    const storagePath = `${normalizedConversationId}/${session.user.id}/${fileName}`;
 
     /*
-     * Convert File -> Buffer
+     * Convert file to Buffer
      */
-    const arrayBuffer =
-      await file.arrayBuffer();
+    const arrayBuffer = await file.arrayBuffer();
 
-    const buffer =
-      Buffer.from(arrayBuffer);
+    const buffer = Buffer.from(arrayBuffer);
 
     /*
-     * Upload to Supabase Storage
+     * Upload to Supabase
      */
     const { error: uploadError } =
       await supabaseAdmin.storage
@@ -200,8 +169,6 @@ export async function POST(request: Request) {
 
     /*
      * Get public URL
-     *
-     * The bucket must be configured as public.
      */
     const {
       data: { publicUrl },

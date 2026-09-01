@@ -95,11 +95,6 @@ export default function NewChat({
       setCreatingUserId(userId);
       setError("");
 
-      /*
-       * First check whether a conversation already exists.
-       *
-       * This does NOT create a conversation.
-       */
       const response = await fetch(
         "/api/conversations/direct",
         {
@@ -123,10 +118,6 @@ export default function NewChat({
         );
       }
 
-      /*
-       * Existing conversation:
-       * open it normally.
-       */
       if (data.conversation?.id) {
         router.push(
           `/chat/${data.conversation.id}`

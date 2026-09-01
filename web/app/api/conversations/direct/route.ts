@@ -59,7 +59,10 @@ export async function POST(request: Request) {
       .sort()
       .join(":");
 
-    const conversation =
+    /*
+     * Whether the conversation already exists
+     */
+    const existingConversation =
       await prisma.conversation.findUnique({
         where: {
           directKey,
@@ -82,19 +85,132 @@ export async function POST(request: Request) {
         },
       });
 
+    if (existingConversation) {
+      return NextResponse.json({
+        conversation: existingConversation,
+        existing: true,
+      });
+    }
+
+    const conversation =
+      await prisma.conversation.create({
+        data: {
+          type: "DIRECT",
+          directKey,
+          createdById: session.user.id,
+
+          members: {
+            create: [
+              {
+                userId: session.user.id,
+              },
+              {
+                userId: otherUserId,
+              },
+            ],
+          },
+        },
+
+        include: {
+          members: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  username: true,
+                  email: true,
+                  avatarUrl: true,
+                  status: true,
+                  lastSeenAt: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
     return NextResponse.json({
-      conversation: conversation ?? null,
-      existing: Boolean(conversation),
+      conversation,
+      existing: false,
     });
   } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "P2002"
+    ) {
+      try {
+        const session = await auth();
+
+        if (!session?.user?.id) {
+          return NextResponse.json(
+            { error: "Unauthorized" },
+            { status: 401 }
+          );
+        }
+
+        const body = await request
+          .clone()
+          .json();
+
+        const otherUserId =
+          typeof body.userId === "string"
+            ? body.userId.trim()
+            : "";
+
+        const directKey = [
+          session.user.id,
+          otherUserId,
+        ]
+          .sort()
+          .join(":");
+
+        const conversation =
+          await prisma.conversation.findUnique({
+            where: {
+              directKey,
+            },
+            include: {
+              members: {
+                include: {
+                  user: {
+                    select: {
+                      id: true,
+                      username: true,
+                      email: true,
+                      avatarUrl: true,
+                      status: true,
+                      lastSeenAt: true,
+                    },
+                  },
+                },
+              },
+            },
+          });
+
+        if (conversation) {
+          return NextResponse.json({
+            conversation,
+            existing: true,
+          });
+        }
+      } catch (raceError) {
+        console.error(
+          "Failed to recover direct conversation race:",
+          raceError
+        );
+      }
+    }
+
     console.error(
-      "Find direct conversation error:",
+      "Find/create direct conversation error:",
       error
     );
 
     return NextResponse.json(
       {
-        error: "Failed to find conversation",
+        error: "Failed to find or create conversation",
       },
       {
         status: 500,

@@ -115,13 +115,6 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
           return;
         }
 
-        const handleConnect = () => {
-          console.log(
-            "🟢 ConversationList socket connected:",
-            socket?.id
-          );
-        };
-
         const handleNewMessage = (
           message: LastMessage & {
             conversationId: string;
@@ -254,9 +247,6 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
                   conversation.id === conversationId
               );
 
-            /*
-             * Conversation is already in the sidebar.
-             */
             if (conversationIndex !== -1) {
               const existingConversation = previousConversations[conversationIndex];
 
@@ -441,8 +431,6 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
           });
         };
 
-        socket.on("connect", handleConnect);
-
         socket.on("message:new", handleNewMessage);
 
         socket.on("conversation:read", handleConversationRead);
@@ -458,7 +446,6 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
         socket.on("conversation:new", handleConversationNew);
 
         return () => {
-          socket?.off("connect", handleConnect);
 
           socket?.off("message:new", handleNewMessage);
 
@@ -546,10 +533,8 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
 
   return (
     <main className="flex h-screen overflow-hidden">
-      {/* Sidebar */}
 
       <aside className="flex w-80 shrink-0 flex-col border-r border-white/10 bg-slate-950">
-        {/* Sidebar Header */}
 
         <div className="border-b border-white/10 p-5">
           <div className="flex items-center justify-between">
@@ -627,7 +612,6 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
                         : "hover:bg-white/5"
                         }`}
                     >
-                      {/* Avatar */}
 
                       <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-800 text-sm font-semibold">
                         {avatar ? (
@@ -647,8 +631,6 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
                             <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-slate-950 bg-emerald-400" />
                           )}
                       </div>
-
-                      {/* Conversation info */}
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
@@ -691,12 +673,10 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
             </div>
           )}
         </div>
-        {/* Sidebar Footer */}
 
         <div className="border-t border-white/10 p-4">
           <button onClick={async () => {
 
-            // disconnectSocket();
             await signOut({
               callbackUrl: "/login",
             });

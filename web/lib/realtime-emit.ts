@@ -19,7 +19,6 @@ export async function emitToUser(
       }),
     });
   } catch (error) {
-    // Don't fail the request over a best-effort realtime push.
     console.error(`Failed to emit "${event}" to user ${userId}:`, error);
   }
 }
