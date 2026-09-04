@@ -1,0 +1,69 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_WEB_URL: ${NEXT_PUBLIC_WEB_URL}
+        NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+    env_file:
+      - .env.production
+    restart: unless-stopped
+    expose:
+      - "3000"
+    depends_on:
+      realtime-lb:
+        condition: service_started
+
+  realtime-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.realtime
+    env_file:
+      - .env.production
+    environment:
+      PORT: 4000
+      INSTANCE_ID: server-1
+    restart: unless-stopped
+    expose:
+      - "4000"
+
+  realtime-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.realtime
+    env_file:
+      - .env.production
+    environment:
+      PORT: 4000
+      INSTANCE_ID: server-2
+    restart: unless-stopped
+    expose:
+      - "4000"
+
+  realtime-lb:
+    image: nginx:1.29-alpine
+    restart: unless-stopped
+    depends_on:
+      - realtime-1
+      - realtime-2
+    expose:
+      - "4000"
+    volumes:
+      - ./nginx/nginx.internal.conf:/etc/nginx/nginx.conf:ro
+
+  nginx:
+    image: nginx:1.29-alpine
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_started
+      realtime-lb:
+        condition: service_started
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.docker.conf:/etc/nginx/nginx.conf:ro
