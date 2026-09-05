@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@chat/db";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { getSupabaseAdmin } from "@/lib/supabase/server";
 
 const BUCKET_NAME = "chat-app-images";
 
@@ -13,6 +13,8 @@ const ALLOWED_TYPES = [
   "image/webp",
   "image/gif",
 ] as const;
+
+const supabaseAdmin = getSupabaseAdmin();
 
 export async function POST(request: Request) {
   try {
