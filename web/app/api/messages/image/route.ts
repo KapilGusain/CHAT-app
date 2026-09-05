@@ -14,10 +14,10 @@ const ALLOWED_TYPES = [
   "image/gif",
 ] as const;
 
-const supabaseAdmin = getSupabaseAdmin();
 
 export async function POST(request: Request) {
   try {
+    const supabaseAdmin = getSupabaseAdmin();
     const session = await auth();
 
     if (!session?.user?.id) {
