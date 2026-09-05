@@ -64,6 +64,6 @@ services:
       realtime-lb:
         condition: service_started
     ports:
-      - "8080:80"
+      - "80:80"
     volumes:
       - ./nginx/nginx.docker.conf:/etc/nginx/nginx.conf:ro
