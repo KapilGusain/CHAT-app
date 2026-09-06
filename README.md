@@ -1,4 +1,4 @@
-# 💬 Realtime Chat Application
+#  Realtime Chat Application
 
 A scalable, realtime chat application built with **Next.js, Socket.IO, PostgreSQL, Prisma, Redis/Valkey, and Auth.js**.
 
@@ -16,7 +16,7 @@ The application provides a modern messaging experience with realtime communicati
 * Authenticated Socket.IO connections
 * Conversation membership validation
 
-### 💬 Messaging
+###  Messaging
 
 * Realtime one-to-one messaging
 * Persistent messages using PostgreSQL
@@ -27,7 +27,7 @@ The application provides a modern messaging experience with realtime communicati
 * Paginated message loading
 * Deterministic conversation handling
 
-### 🖼️ Image Messaging
+###  Image Messaging
 
 * Send images inside conversations
 * Image uploads using **Supabase Storage**
@@ -39,7 +39,7 @@ The application provides a modern messaging experience with realtime communicati
   * File size
   * MIME type
 
-### ✓ Read Receipts
+###  Read Receipts
 
 * Message delivery/read status
 * Single tick for delivered messages
@@ -48,13 +48,13 @@ The application provides a modern messaging experience with realtime communicati
 * Unread message counts
 * Read receipts persisted in the database
 
-### 🟢 Presence
+###  Presence
 
 * Realtime online/offline status
 * User-specific Socket.IO rooms
 * Presence synchronization across connected clients
 
-### ⚡ Realtime Architecture
+###  Realtime Architecture
 
 * Socket.IO for realtime communication
 * Separate realtime server
@@ -64,7 +64,7 @@ The application provides a modern messaging experience with realtime communicati
 * Realtime conversation updates
 * Realtime unread-count updates
 
-### 📱 Conversation Management
+###  Conversation Management
 
 * Direct conversations
 * Duplicate direct-conversation prevention
@@ -75,7 +75,7 @@ The application provides a modern messaging experience with realtime communicati
 
 ---
 
-## 🏗️ Architecture
+##  Architecture
 
 ```text
                     ┌─────────────────────┐
@@ -112,7 +112,7 @@ The application provides a modern messaging experience with realtime communicati
 
 ---
 
-## 🧰 Tech Stack
+##  Tech Stack
 
 | Technology           | Purpose                       |
 | -------------------- | ----------------------------- |
@@ -132,7 +132,7 @@ The application provides a modern messaging experience with realtime communicati
 
 ---
 
-## 📂 Project Structure
+##  Project Structure
 
 The project is split into the web application and the realtime server.
 
@@ -140,7 +140,7 @@ The realtime server does not blindly trust a client connection. A realtime authe
 
 ---
 
-# 🔌 Socket.IO Rooms
+#  Socket.IO Rooms
 
 The application uses two main room types.
 
@@ -173,7 +173,7 @@ This room structure allows the realtime server to target events efficiently rath
 
 ---
 
-# 🗄️ Database
+#  Database
 
 The application uses **PostgreSQL** with **Prisma ORM**.
 
@@ -213,7 +213,7 @@ The actual image file is stored in Supabase Storage while the message database s
 
 ---
 
-# 📖 Read Receipts
+#  Read Receipts
 
 Read state is tracked using conversation-level and message-level information.
 
@@ -240,7 +240,7 @@ The application uses `ConversationMember.lastReadAt` along with message read rec
 
 ---
 
-# 🟢 Online / Offline Presence
+#  Online / Offline Presence
 
 Presence is managed through Socket.IO connections.
 
@@ -272,7 +272,7 @@ Redis/Valkey helps coordinate realtime state when multiple realtime server insta
 
 ---
 
-# ⚡ Scalability
+#  Scalability
 
 The application separates the web application from the realtime server.
 
@@ -333,7 +333,7 @@ REDIS_URL="your_redis_or_valkey_connection_string"
 
 ---
 
-# 🛠️ Installation
+#  Installation
 
 ## 1. Clone the Repository
 
@@ -432,7 +432,7 @@ The Socket.IO server is configured to run separately from the Next.js applicatio
 
 ---
 
-# 🔧 Development
+#  Development
 
 For local development, you need both servers running:
 
@@ -457,7 +457,7 @@ NEXT_PUBLIC_SOCKET_URL=http://localhost:5000
 
 ---
 
-# 🔒 Security Considerations
+#  Security Considerations
 
 The application includes several security layers:
 
@@ -474,7 +474,7 @@ Clients should never be trusted to determine whether they are members of a conve
 
 ---
 
-# 📈 Current Capabilities
+#  Current Capabilities
 
 | Feature                           | Status |
 | --------------------------------- | ------ |
@@ -500,7 +500,7 @@ Clients should never be trusted to determine whether they are members of a conve
 
 ---
 
-# 🚧 Future Improvements
+#  Future Improvements
 
 Potential improvements for future development include:
 
@@ -523,7 +523,7 @@ Potential improvements for future development include:
 
 ---
 
-# 🌐 Production Architecture
+#  Production Architecture
 
 A production deployment can be structured as:
 
@@ -553,7 +553,7 @@ This separation allows the frontend/API layer and realtime layer to scale indepe
 
 ---
 
-# 🎯 Project Goals
+#  Project Goals
 
 This project was built with a focus on:
 
@@ -568,7 +568,7 @@ This project was built with a focus on:
 
 ---
 
-# 👨‍💻 Author
+#  Author
 
 **Kapil Gusain**
 
