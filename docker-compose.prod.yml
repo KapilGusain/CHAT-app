@@ -1,0 +1,57 @@
+services:
+  web:
+    image: ghcr.io/kapilgusain/chat-app-web:${IMAGE_TAG}
+    env_file:
+      - .env.production
+    restart: unless-stopped
+    expose:
+      - "3000"
+    depends_on:
+      realtime-lb:
+        condition: service_started
+
+  realtime-1:
+    image: ghcr.io/kapilgusain/chat-app-realtime:${IMAGE_TAG}
+    env_file:
+      - .env.production
+    environment:
+      PORT: 4000
+      INSTANCE_ID: server-1
+    restart: unless-stopped
+    expose:
+      - "4000"
+
+  realtime-2:
+    image: ghcr.io/kapilgusain/chat-app-realtime:${IMAGE_TAG}
+    env_file:
+      - .env.production
+    environment:
+      PORT: 4000
+      INSTANCE_ID: server-2
+    restart: unless-stopped
+    expose:
+      - "4000"
+
+  realtime-lb:
+    image: nginx:1.29-alpine
+    restart: unless-stopped
+    depends_on:
+      - realtime-1
+      - realtime-2
+    expose:
+      - "4000"
+    volumes:
+      - ./nginx/nginx.internal.conf:/etc/nginx/nginx.conf:ro
+
+  nginx:
+    image: nginx:1.29-alpine
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_started
+      realtime-lb:
+        condition: service_started
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.docker.conf:/etc/nginx/nginx.conf:ro
