@@ -96,7 +96,7 @@ jobs:
               --parameters 'commands=[
                 "set -e",
                 "cd /home/ubuntu/apps/CHAT-app",
-                "git config --global --add safe.directory /home/ubuntu/apps/CHAT-app",
+                "git config --system --add safe.directory /home/ubuntu/apps/CHAT-app",
                 "git fetch origin main",
                 "git reset --hard origin/main",
                 "IMAGE_TAG=sha-'${GITHUB_SHA}' docker compose --env-file .env.production -f docker-compose.prod.yml pull",
