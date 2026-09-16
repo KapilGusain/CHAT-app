@@ -37,6 +37,9 @@ jobs:
           DATABASE_URL: postgresql://build:build@localhost:5432/build
         run: npx prisma generate
 
+      - name: Install Linux TypeScript binary
+        run: npm install --no-save @typescript/typescript-linux-x64
+
       - name: Build realtime TypeScript
         run: npm run build:realtime
 
