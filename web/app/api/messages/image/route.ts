@@ -61,22 +61,20 @@ export async function POST(request: Request) {
       );
     }
 
-    const normalizedConversationId =
-      conversationId.trim();
+    const normalizedConversationId = conversationId.trim();
 
-    const membership =
-      await prisma.conversationMember.findUnique({
-        where: {
-          conversationId_userId: {
-            conversationId:
-              normalizedConversationId,
-            userId: session.user.id,
-          },
+    const membership = await prisma.conversationMember.findUnique({
+      where: {
+        conversationId_userId: {
+          conversationId:
+            normalizedConversationId,
+          userId: session.user.id,
         },
-        select: {
-          id: true,
-        },
-      });
+      },
+      select: {
+        id: true,
+      },
+    });
 
     if (!membership) {
       return NextResponse.json(
@@ -89,7 +87,10 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!ALLOWED_TYPES.includes(file.type as any)) {
+    const isAllowedType = ( type: string ): type is (typeof ALLOWED_TYPES)[number] =>
+      ALLOWED_TYPES.includes(type as (typeof ALLOWED_TYPES)[number]);
+
+    if (!isAllowedType(file.type)) {
       return NextResponse.json(
         {
           success: false,
@@ -98,7 +99,7 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
- 
+
     if (file.size <= 0) {
       return NextResponse.json(
         {
