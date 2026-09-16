@@ -77,22 +77,6 @@ jobs:
       id-token: write
 
     steps:
-      - name: Debug OIDC subject
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const token = await core.getIDToken('sts.amazonaws.com');
-            const payload = JSON.parse(
-              Buffer.from(token.split('.')[1], 'base64url').toString()
-            );
-      
-            console.log("OIDC subject:", payload.sub);
-            console.log("OIDC audience:", payload.aud);
-            console.log("Repository:", payload.repository);
-            console.log("Repository ID:", payload.repository_id);
-            console.log("Repository owner ID:", payload.repository_owner_id);
-            console.log("Environment:", payload.environment);
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -112,6 +96,7 @@ jobs:
               --parameters 'commands=[
                 "set -e",
                 "cd /home/ubuntu/apps/CHAT-app",
+                "git config --global --add safe.directory /home/ubuntu/apps/CHAT-app",
                 "git fetch origin main",
                 "git reset --hard origin/main",
                 "IMAGE_TAG=sha-'${GITHUB_SHA}' docker compose --env-file .env.production -f docker-compose.prod.yml pull",
