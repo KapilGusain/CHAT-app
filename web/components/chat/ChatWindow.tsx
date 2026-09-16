@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { getSocket } from "@/lib/socket";
 import type { Socket } from "socket.io-client";
+import Image from "next/image";
 
 interface Message {
   id: string;
@@ -500,7 +501,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
         if (socket.connected) {
           setSocketReady(true);
           await joinCurrentConversation();
-          
+
         } else {
           setSocketReady(false);
 
@@ -546,15 +547,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
     const currentConversationId = activeConversationId;
 
     if (!currentConversationId) {
-      setMessages([]);
-      setHasMoreMessages(false);
-      setLoading(false);
-
-      readMessagesRef.current =
-        new Set();
-
-      setReadMessages(new Set());
-
+      readMessagesRef.current = new Set();
       return;
     }
 
@@ -1387,10 +1380,10 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
 
   return (
     <div className="flex h-150 flex-col overflow-hidden rounded-lg border border-[#4a3d73]/25 bg-[#140f24] shadow-[0_0_0_1px_rgba(0,0,0,0.4)]">
-      
+
       <div className="h-0.75 w-full bg-linear-to-r from-[#8b6fd9] via-[#8b6fd9]/40 to-transparent" />
 
-      
+
       <div className="relative border-b border-[#4a3d73]/25 px-5 py-4">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
@@ -1408,7 +1401,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
           </div>
 
           <div className="flex shrink-0 items-center gap-4">
-            
+
             <button
               type="button"
               onClick={() => {
@@ -1620,7 +1613,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
                           This message was deleted
                         </p>
                       ) : editingMessageId === message.id ? (
-                        <div className="min-w-[240px]">
+                        <div className="min-w-60">
                           <textarea
                             value={editingContent}
                             onChange={(event) => setEditingContent(event.target.value)}
@@ -1650,7 +1643,7 @@ export default function ChatWindow({ conversationId, currentUserId, chatUserName
                         <div className="flex items-end justify-end gap-2">
                           {message.imageUrl ? (
                             <div className="space-y-2">
-                              <img
+                              <Image
                                 src={message.imageUrl}
                                 alt={message.imageName ?? "Image"}
                                 className="max-h-96 max-w-full rounded-md object-contain"

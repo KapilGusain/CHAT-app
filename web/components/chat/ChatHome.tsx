@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 interface ChatHomeProps {
   currentUserId: string;
@@ -202,7 +203,7 @@ export default function ChatHome({
                     >
                       <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-800 text-sm font-semibold text-white">
                         {otherUser?.avatarUrl ? (
-                          <img
+                          <Image
                             src={
                               otherUser.avatarUrl
                             }

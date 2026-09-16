@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { getSocket } from "@/lib/socket";
 import type { Socket } from "socket.io-client";
 import { signOut } from "next-auth/react";
+import Image from "next/image";
 
 interface User {
   id: string;
@@ -615,7 +616,7 @@ export default function ConversationList({ currentUserId, currentUsername }: Con
 
                       <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-800 text-sm font-semibold">
                         {avatar ? (
-                          <img
+                          <Image
                             src={avatar}
                             alt={name}
                             className="h-full w-full rounded-full object-cover"

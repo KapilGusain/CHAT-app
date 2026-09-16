@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 interface User {
   id: string;
@@ -17,7 +18,7 @@ interface NewChatProps {
 }
 
 export default function NewChat({
-  currentUserId,
+  currentUserId: _currentUserId,
 }: NewChatProps) {
   const router = useRouter();
 
@@ -40,7 +41,6 @@ export default function NewChat({
     const trimmed = query.trim();
 
     if (trimmed.length < 2) {
-      setUsers([]);
       return;
     }
 
@@ -50,35 +50,24 @@ export default function NewChat({
           setLoading(true);
           setError("");
 
-          const response =
-            await fetch(
-              `/api/users?q=${encodeURIComponent(
-                trimmed
-              )}`,
-              {
-                cache: "no-store",
-              }
-            );
+          const response = await fetch(
+            `/api/users?q=${encodeURIComponent(trimmed)}`,
+            {
+              cache: "no-store",
+            }
+          );
 
           if (!response.ok) {
-            throw new Error(
-              "Failed to search users"
-            );
+            throw new Error("Failed to search users");
           }
 
-          const data =
-            await response.json();
+          const data = await response.json();
 
           setUsers(data.users ?? []);
         } catch (error) {
-          console.error(
-            "User search error:",
-            error
-          );
+          console.error("User search error:", error);
 
-          setError(
-            "Unable to search users."
-          );
+          setError("Unable to search users.");
         } finally {
           setLoading(false);
         }
@@ -86,9 +75,10 @@ export default function NewChat({
       300
     );
 
-    return () =>
-      clearTimeout(timeout);
+    return () => clearTimeout(timeout);
   }, [query]);
+
+  const visibleUsers = query.trim().length >= 2 ? users : [];
 
   async function startConversation(userId: string) {
     try {
@@ -202,14 +192,14 @@ export default function NewChat({
             )}
 
           <div className="space-y-2">
-            {users.map((user) => (
+            {visibleUsers.map((user) => (
               <div
                 key={user.id}
                 className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-white/5"
               >
                 <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-800 font-semibold">
                   {user.avatarUrl ? (
-                    <img
+                    <Image
                       src={user.avatarUrl}
                       alt={user.username}
                       className="h-full w-full rounded-full object-cover"
